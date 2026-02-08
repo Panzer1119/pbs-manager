@@ -3,7 +3,14 @@
     "version": "0.0.0",
     "license": "Apache-2.0",
     "scripts": {
-        "create-indices": "ts-node --pretty --project=tools/tsconfig.tools.json tools/create-indices.ts"
+        "create-indices": "ts-node --pretty --project=tools/tsconfig.tools.json tools/create-indices.ts",
+        "typeorm": "ts-node --project ./tsconfig.typeorm.json ./node_modules/typeorm/cli.js -d data-source.ts",
+        "migration:generate": "npm run typeorm migration:generate -- -p",
+        "migration:generate-dry-run": "npm run typeorm migration:generate -- -p --dryrun libs/api-schema/src/lib/migrations/DryRun",
+        "migration:show": "npm run typeorm migration:show",
+        "migration:run": "npm run typeorm migration:run",
+        "migration:revert": "npm run typeorm migration:revert",
+        "migration:create": "typeorm-ts-node-commonjs migration:create"
     },
     "private": true,
     "dependencies": {
