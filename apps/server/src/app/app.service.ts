@@ -1,181 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { Config, NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
-import {
-    Fingerprint,
-    Format,
-    Key,
-    KeyFormatType,
-    parseKey,
-    parsePrivateKey,
-    PrivateKey,
-    PrivateKeyFormatType,
-} from "sshpk";
-import { DebugFunction, SyncHostVerifier } from "ssh2";
+import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
 import { DataSource, EntityManager, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { Chunk, Datastore, SSHConnection } from "@pbs-manager/database-schema";
-
-export type ParseKeyOptions = string | (Format.ReadOptions & { filename?: string });
-export type KeyDataType = string | Buffer;
-export type SSHConnectionData =
-    | { sshConnectionId: number }
-    | {
-          host: string;
-          port: number;
-          username: string;
-          // password?: string;
-          privateKey?: string;
-          // passphrase?: string;
-      };
-
-export function parsePublicOrPrivateKey(
-    data: KeyDataType,
-    privateKey: boolean,
-    format?: KeyFormatType,
-    options?: ParseKeyOptions,
-    ignoreErrors: boolean = false
-): Key | PrivateKey {
-    // Check if data is undefined
-    if (data == undefined) {
-        // Check if errors should be ignored
-        if (!ignoreErrors) {
-            throw new Error("data is undefined");
-        }
-        return undefined as unknown as Key | PrivateKey;
-    }
-    // Check if the data is a Buffer
-    if (Buffer.isBuffer(data)) {
-        // data = data.toString(); //FIXME This messes with the data
-    }
-    // Check if the data is a string
-    if (typeof data === "string") {
-        // Trim the data
-        // data = data.trim(); //FIXME This messes with the data
-    }
-    let key: Key;
-    // Parse the data
-    if (privateKey) {
-        key = parsePrivateKey(data, format as PrivateKeyFormatType, options);
-    } else {
-        key = parseKey(data, format as KeyFormatType, options);
-    }
-    // Check if the key is undefined
-    if (key == undefined) {
-        // Check if errors should be ignored
-        if (!ignoreErrors) {
-            throw new Error(`Public or Private key could not be read`);
-        }
-        return undefined as unknown as Key | PrivateKey;
-    }
-    // Check if the key is a PrivateKey
-    if (privateKey && !(key instanceof PrivateKey)) {
-        // Check if errors should be ignored
-        if (!ignoreErrors) {
-            throw new Error(`Public key was read as a Private key`);
-        }
-        return undefined as unknown as Key | PrivateKey;
-    }
-    // Return the key
-    return key;
-}
-
-export interface CreateSyncHostVerifierOptions {
-    format?: KeyFormatType;
-    parseKeyOptions?: ParseKeyOptions;
-    debug?: (message: string) => void;
-}
-
-export function createSyncHostVerifier(
-    fingerprint: Fingerprint | Fingerprint[],
-    options?: CreateSyncHostVerifierOptions
-): SyncHostVerifier {
-    // Check if fingerprint is undefined
-    if (fingerprint == undefined) {
-        throw new Error("fingerprint is undefined");
-    }
-    // Create an array of fingerprints
-    const fingerprints: Fingerprint[] = Array.isArray(fingerprint) ? fingerprint : [fingerprint];
-    // Check if any fingerprint is undefined
-    if (fingerprints.some(fingerprint => fingerprint == undefined)) {
-        throw new Error("A fingerprint is undefined");
-    }
-    // Return the verifier
-    return (keyBuffer: Buffer): boolean => {
-        // Check if keyBuffer is undefined
-        if (keyBuffer == undefined) {
-            return false;
-        }
-        // Parse the key
-        const key: Key = parsePublicOrPrivateKey(keyBuffer, false, options?.format, options?.parseKeyOptions, true);
-        // Check if key is undefined
-        if (key == undefined) {
-            Logger.warn("Public key could not be parsed", "SyncHostVerifier");
-            return false;
-        }
-        // Check if the key is a PrivateKey
-        if (key instanceof PrivateKey) {
-            Logger.warn("Public key was parsed as a Private key", "SyncHostVerifier");
-            return false;
-        }
-        // Check if the key matches any fingerprint
-        return fingerprints.some(fingerprint => {
-            const matches: boolean = fingerprint.matches(key);
-            if (matches && options?.debug) {
-                options.debug(`Fingerprint matched: ${JSON.stringify(fingerprint.toString())}`);
-            }
-            return matches;
-        });
-    };
-}
-
-export function createSSHConfig(
-    host: string,
-    port: number,
-    username: string,
-    privateKey?: PrivateKey | string,
-    remoteHostKeys?: Key[],
-    debug?: DebugFunction
-): Config {
-    // Create the config
-    const config: Config = {
-        host,
-        port,
-        username,
-        privateKey: typeof privateKey === "string" ? privateKey : privateKey?.toString("openssh"),
-        debug,
-    };
-    // Check if the private key is undefined
-    if (!config.privateKey) {
-        throw new Error("privateKey is undefined");
-    }
-    // Check if the remote host keys are undefined or empty (i.e. no host verification)
-    if (!remoteHostKeys?.length) {
-        // Return the config
-        return config;
-    }
-    // Create the remote host key fingerprints array
-    const remoteHostKeyFingerprints: Fingerprint[] = [];
-    // Get the remote host key fingerprints
-    for (const remoteHostKey of remoteHostKeys) {
-        // Check if the public key is undefined
-        if (remoteHostKey == undefined) {
-            continue;
-        }
-        // Get the fingerprint
-        const remoteHostKeyFingerprint: Fingerprint | undefined = remoteHostKey.fingerprint();
-        // Check if the fingerprint is undefined
-        if (remoteHostKeyFingerprint == undefined) {
-            continue;
-        }
-        // Add the fingerprint to the array
-        remoteHostKeyFingerprints.push(remoteHostKeyFingerprint);
-    }
-    // Create the host verifier
-    config.hostVerifier = createSyncHostVerifier(remoteHostKeyFingerprints, { debug });
-    // Return the config
-    return config;
-}
+import { Chunk, Datastore } from "@pbs-manager/database-schema";
+import { useSSHConnection } from "./ssh-utils";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -240,24 +69,8 @@ export class AppService implements OnModuleInit {
                 if (!datastoreMountpoint) {
                     throw new Error(`Mountpoint for datastore with id ${datastoreId} not found`);
                 }
-                const sshConnection: SSHConnection = await entityManagerOuter.findOne(SSHConnection, {
-                    where: { id: sshConnectionId },
-                    relations: { sshKeypair: true },
-                });
-                if (!sshConnection) {
-                    throw new Error(`SSH connection with id ${sshConnectionId} not found`);
-                }
-                if (!sshConnection.sshKeypair) {
-                    throw new Error(`SSH keypair for SSH connection with id ${sshConnectionId} not found`);
-                }
                 const findCommandArray: string[] = buildChunkFileFindAndStatCommandArray(datastoreMountpoint, true);
                 this.logger.verbose(findCommandArray);
-                const connection: SSHConnectionData = {
-                    host: sshConnection.host,
-                    port: sshConnection.port,
-                    username: sshConnection.username,
-                    privateKey: sshConnection.sshKeypair.privateKey.toString("openssh"),
-                };
                 // const privateKey: string =
                 //     "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "TODO\n" + "-----END OPENSSH PRIVATE KEY-----";
                 // const publicKey: string = "ssh-ed25519 TODO";
@@ -276,17 +89,19 @@ export class AppService implements OnModuleInit {
                 //     this.logger.verbose(sshKeypair);
                 //     await entityManager.save(sshKeypair);
                 // });
+
+                this.logger.verbose("Finding chunk files on disk using SSH");
                 const options: SSHExecOptions = { stream: "both", execOptions: { pty: false } };
                 const {
                     startTime,
                     endTime,
                     response,
                 }: { startTime: number; endTime: number; response: string | SSHExecCommandResponse } =
-                    await this.useSSHConnection(connection, options, async (ssh, options) =>
+                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, options, async (ssh, options) =>
                         this.executeAndTimeCommand(ssh, findCommandArray, options)
                     );
                 // this.logger.verbose(response);
-                this.logger.debug(`${endTime - startTime}ms`);
+                this.logger.verbose(`Time taken: ${endTime - startTime}ms`);
                 let stdout: string;
                 if (typeof response === "string") {
                     stdout = response;
@@ -308,6 +123,7 @@ export class AppService implements OnModuleInit {
                     hostId
                 );
                 const chunksOnDisk: ChunkMetadata[] = chunksByDatastore[datastoreMountpoint];
+                this.logger.verbose(`Found ${chunksOnDisk.length} chunks on disk for datastoreId ${datastoreId}`);
 
                 await this.dataSource.transaction(async entityManager1 => {
                     this.logger.verbose(`Gathering existing chunks from the database for datastoreId ${datastoreId}`);
@@ -450,47 +266,6 @@ export class AppService implements OnModuleInit {
             // const channel: ClientChannel = await ssh.requestShell(false);
         } else {
             return ssh.execCommand(command, options);
-        }
-    }
-
-    private async useSSHConnection<R>(
-        connection: SSHConnectionData,
-        options: SSHExecOptions,
-        callback: (client: NodeSSH, options?: SSHExecOptions) => Promise<R> | R
-    ): Promise<R> {
-        let config: Config | undefined;
-        if ("sshConnectionId" in connection) {
-            // const sshConnection: SSHConnection | undefined = await this.sshConnectionRepository.findOne({
-            //     where: { id: connection.sshConnectionId },
-            //     relations: { sshKeypair: true, remoteHostKeys: true },
-            // });
-            // if (!sshConnection) {
-            //     throw new Error(`SSH connection with id ${JSON.stringify(connection.sshConnectionId)} not found`);
-            // }
-            // config = createSSHConfig(
-            //     sshConnection.host,
-            //     sshConnection.port,
-            //     sshConnection.username,
-            //     sshConnection.sshKeypair?.privateKey,
-            //     sshConnection.remoteHostKeys?.map(remoteHostKey => remoteHostKey.publicKey)
-            // );
-            throw new Error("SSH connection by ID not implemented yet");
-        } else if (
-            "host" in connection &&
-            "port" in connection &&
-            "username" in connection &&
-            "privateKey" in connection
-        ) {
-            config = createSSHConfig(connection.host, connection.port, connection.username, connection.privateKey);
-        } else {
-            throw new Error(`Invalid SSH connection data provided: ${JSON.stringify(connection)}`);
-        }
-        const ssh: NodeSSH = new NodeSSH();
-        await ssh.connect(config);
-        try {
-            return await callback(ssh, options);
-        } finally {
-            ssh.dispose();
         }
     }
 }
