@@ -7,8 +7,8 @@ export * from "./lib/index-embeddings";
 // export * from "./lib/index-errors";
 
 // Entities
-// export * from "./lib/index-entities";
-// export * as entities from "./lib/index-entities";
+export * from "./lib/index-entities";
+export * as entities from "./lib/index-entities";
 
 // Migrations
 // export * as migrations from "./lib/index-migrations";
