@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGenerat
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Host } from "./host.entity";
 import { Namespace } from "./namespace.entity";
+import { Group } from "./group.entity";
 
 @Entity()
 @Index(["host", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -31,8 +32,8 @@ export class Datastore {
     @OneToMany(() => Namespace, namespace => namespace.datastore)
     namespaces?: Namespace[];
 
-    // @OneToMany(() => Group, group => group.datastore)
-    // groups?: Group[];
+    @OneToMany(() => Group, group => group.datastore)
+    groups?: Group[];
 
     // @OneToMany(() => Chunk, chunk => chunk.datastore)
     // chunks?: Chunk[];

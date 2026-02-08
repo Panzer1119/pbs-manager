@@ -4,6 +4,7 @@ import {
     Index,
     JoinColumn,
     ManyToOne,
+    OneToMany,
     PrimaryGeneratedColumn,
     Tree,
     TreeChildren,
@@ -11,6 +12,7 @@ import {
 } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Datastore } from "./datastore.entity";
+import { Group } from "./group.entity";
 
 @Entity()
 @Tree("closure-table")
@@ -59,6 +61,6 @@ export class Namespace {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
-    // @OneToMany(() => Group, group => group.namespace)
-    // groups?: Group[];
+    @OneToMany(() => Group, group => group.namespace)
+    groups?: Group[];
 }
