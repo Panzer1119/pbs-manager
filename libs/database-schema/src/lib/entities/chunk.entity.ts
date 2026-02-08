@@ -28,6 +28,10 @@ export class Chunk {
     unused!: boolean;
 
     @Index()
+    @Column({ default: true })
+    exists!: boolean;
+
+    @Index()
     @Column("bigint", { nullable: true, transformer: new BigIntTransformer() })
     sizeBytes?: number;
 
