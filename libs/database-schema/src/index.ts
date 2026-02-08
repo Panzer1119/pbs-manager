@@ -17,7 +17,7 @@ export * as entities from "./lib/index-entities";
 //export * from "./lib/index-transformers";
 
 // Types
-//export * from "./lib/index-types";
+export * from "./lib/index-types";
 
 // Validators
 // export * from "./lib/index-validators";
