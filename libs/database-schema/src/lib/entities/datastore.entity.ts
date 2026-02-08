@@ -1,6 +1,7 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Host } from "./host.entity";
+import { Namespace } from "./namespace.entity";
 
 @Entity()
 @Index(["host", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -27,11 +28,11 @@ export class Datastore {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
+    @OneToMany(() => Namespace, namespace => namespace.datastore)
+    namespaces?: Namespace[];
+
     // @OneToMany(() => Group, group => group.datastore)
     // groups?: Group[];
-
-    // @OneToMany(() => Namespace, namespace => namespace.datastore)
-    // namespaces?: Namespace[];
 
     // @OneToMany(() => Chunk, chunk => chunk.datastore)
     // chunks?: Chunk[];
