@@ -1,3 +1,4 @@
+export * from "./entities/archive-chunk.entity";
 export * from "./entities/archive.entity";
 export * from "./entities/chunk.entity";
 export * from "./entities/datastore.entity";

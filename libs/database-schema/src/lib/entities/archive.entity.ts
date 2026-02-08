@@ -4,12 +4,14 @@ import {
     Index,
     JoinColumn,
     ManyToOne,
+    OneToMany,
     PrimaryGeneratedColumn,
     TableInheritance,
 } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { ArchiveType } from "../types/archive.type";
 import { Snapshot } from "./snapshot.entity";
+import { ArchiveChunk } from "./archive-chunk.entity";
 
 @Entity()
 @Index(["snapshot", "type", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -51,6 +53,6 @@ export class Archive {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
-    // @OneToMany(() => ArchiveChunk, archiveChunk => archiveChunk.archive)
-    // archiveChunks?: ArchiveChunk[];
+    @OneToMany(() => ArchiveChunk, archiveChunk => archiveChunk.archive)
+    archiveChunks?: ArchiveChunk[];
 }

@@ -1,7 +1,8 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Datastore } from "./datastore.entity";
 import { BigIntTransformer } from "../transformers/bigint.transformer";
+import { ArchiveChunk } from "./archive-chunk.entity";
 
 @Entity()
 @Index(["datastore", "hashSHA256"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -33,6 +34,6 @@ export class Chunk {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
-    // @OneToMany(() => ArchiveChunk, archiveChunk => archiveChunk.chunk)
-    // archiveChunks?: ArchiveChunk[];
+    @OneToMany(() => ArchiveChunk, archiveChunk => archiveChunk.chunk)
+    archiveChunks?: ArchiveChunk[];
 }
