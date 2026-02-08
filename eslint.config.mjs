@@ -28,6 +28,9 @@ export default [
     {
         files: ["**/*.ts", "**/*.tsx", "**/*.cts", "**/*.mts", "**/*.js", "**/*.jsx", "**/*.cjs", "**/*.mjs"],
         // Override or add rules here
-        rules: {},
+        rules: {
+            // Disable rule no-inferrable-types
+            "@typescript-eslint/no-inferrable-types": "off",
+        },
     },
 ];
