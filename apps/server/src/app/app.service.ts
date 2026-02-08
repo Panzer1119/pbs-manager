@@ -5,6 +5,7 @@ import { DataSource, EntityManager, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { Chunk, Datastore } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
+import { ArchiveMetadata, buildIndexFileFindCommandArray, parseIndexFilePaths } from "./pbs-index";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -54,7 +55,63 @@ export class AppService implements OnModuleInit {
 
     async onModuleInit(): Promise<void> {
         this.logger.log("AppService initialized");
-        await this.test();
+        // await this.test();
+        await this.test2();
+    }
+
+    async test2(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
+        try {
+            await this.dataSource.transaction(async entityManagerOuter => {
+                this.logger.log("Processing indices for datastoreId " + datastoreId);
+                const datastore: Datastore = await entityManagerOuter.findOneBy(Datastore, { id: datastoreId });
+                if (!datastore) {
+                    throw new Error(`Datastore with id ${datastoreId} not found`);
+                }
+                const datastoreMountpoint: string = datastore.mountpoint;
+                if (!datastoreMountpoint) {
+                    throw new Error(`Mountpoint for datastore with id ${datastoreId} not found`);
+                }
+                const findCommandArray: string[] = buildIndexFileFindCommandArray(datastoreMountpoint, true);
+                this.logger.verbose(findCommandArray);
+
+                this.logger.verbose("Finding index files on disk using SSH");
+                const options: SSHExecOptions = { stream: "both", execOptions: { pty: false } };
+                const {
+                    startTime,
+                    endTime,
+                    response,
+                }: { startTime: number; endTime: number; response: string | SSHExecCommandResponse } =
+                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, options, async (ssh, options) =>
+                        this.executeAndTimeCommand(ssh, findCommandArray, options)
+                    );
+                // this.logger.verbose(response);
+                this.logger.verbose(`Time taken: ${endTime - startTime}ms`);
+                let stdout: string;
+                if (typeof response === "string") {
+                    stdout = response;
+                } else {
+                    stdout = response.stdout;
+                    if (response.stderr) {
+                        this.logger.verbose(`code: ${response.code}, signal: ${response.signal}`);
+                        this.logger.verbose(response.stderr);
+                    }
+                }
+
+                const paths: string[] = stdout.split("\x00").filter(path => path.trim() !== "");
+                this.logger.verbose(`Found ${paths.length} index files on disk for datastoreId ${datastoreId}`);
+                const archivesByDatastore: Record<string, ArchiveMetadata[]> = parseIndexFilePaths(
+                    paths,
+                    datastoreMountpoint,
+                    hostId
+                );
+                const archivesOnDisk: ArchiveMetadata[] = archivesByDatastore[datastoreMountpoint];
+                this.logger.verbose(`Found ${archivesOnDisk.length} archives on disk for datastoreId ${datastoreId}`);
+
+                //TODO
+            });
+        } catch (error) {
+            this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async test(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
@@ -117,6 +174,7 @@ export class AppService implements OnModuleInit {
                     .split("\x00\x00")
                     .map(s => s.split("\x00"))
                     .filter(s => s[0].trim() !== "");
+                this.logger.verbose(`Found ${pathsAndSizes.length} chunk files on disk for datastoreId ${datastoreId}`);
                 const chunksByDatastore: Record<string, ChunkMetadata[]> = parseChunkFilePathsAndSizes(
                     pathsAndSizes,
                     datastoreMountpoint,
