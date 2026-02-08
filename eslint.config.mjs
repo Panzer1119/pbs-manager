@@ -33,6 +33,11 @@ export default [
             "@typescript-eslint/no-inferrable-types": "off",
             // Enable option ignoreRestSiblings for rule no-unused-vars
             "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
+            // Allow ts-ignore and ts-nocheck comments with a description
+            "@typescript-eslint/ban-ts-comment": [
+                "error",
+                { "ts-ignore": "allow-with-description", "ts-nocheck": "allow-with-description" },
+            ],
         },
     },
 ];
