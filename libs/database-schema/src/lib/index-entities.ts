@@ -9,3 +9,5 @@ export * from "./entities/host.entity";
 export * from "./entities/image-archive.entity";
 export * from "./entities/namespace.entity";
 export * from "./entities/snapshot.entity";
+export * from "./entities/ssh-connection.entity";
+export * from "./entities/ssh-keypair.entity";
