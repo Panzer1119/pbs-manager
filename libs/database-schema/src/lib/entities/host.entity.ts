@@ -1,6 +1,7 @@
-import { Column, Entity, Index, JoinColumn, OneToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { HostAddress } from "./host-address.entity";
+import { Datastore } from "./datastore.entity";
 
 @Entity()
 export class Host {
@@ -21,4 +22,7 @@ export class Host {
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
+
+    @OneToMany(() => Datastore, datastore => datastore.host)
+    datastores?: Datastore[];
 }
