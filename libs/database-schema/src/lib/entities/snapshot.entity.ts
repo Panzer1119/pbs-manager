@@ -1,6 +1,7 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Group } from "./group.entity";
+import { Archive } from "./archive.entity";
 
 @Entity()
 @Index(["group", "time"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -28,6 +29,6 @@ export class Snapshot {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
-    // @OneToMany(() => Archive, archive => archive.snapshot)
-    // archives?: Archive[];
+    @OneToMany(() => Archive, archive => archive.snapshot)
+    archives?: Archive[];
 }
