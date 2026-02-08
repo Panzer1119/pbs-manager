@@ -2,7 +2,9 @@
     "name": "@pbs-manager/source",
     "version": "0.0.0",
     "license": "Apache-2.0",
-    "scripts": {},
+    "scripts": {
+        "create-indices": "ts-node --pretty --project=tools/tsconfig.tools.json tools/create-indices.ts"
+    },
     "private": true,
     "dependencies": {
         "@nestjs/common": "^11.0.0",
