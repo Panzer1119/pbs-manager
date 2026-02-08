@@ -1,0 +1,38 @@
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { MetadataEmbedding } from "../embeddings/metadata.embedding";
+import { Datastore } from "./datastore.entity";
+import { BigIntTransformer } from "../transformers/bigint.transformer";
+
+@Entity()
+@Index(["datastore", "hashSHA256"], { unique: true, where: '"metadata_deletion" IS NULL' })
+@Index(["datastore", "hashSHA256", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+export class Chunk {
+    @PrimaryGeneratedColumn("identity")
+    id!: number;
+
+    @Index()
+    @Column()
+    datastoreId!: number;
+
+    @ManyToOne(() => Datastore, datastore => datastore.chunks, { onDelete: "CASCADE", onUpdate: "CASCADE" })
+    @JoinColumn({ referencedColumnName: "id" })
+    datastore?: Datastore;
+
+    @Index()
+    @Column({ length: 64 })
+    hashSHA256!: string;
+
+    @Index()
+    @Column({ default: false })
+    unused!: boolean;
+
+    @Index()
+    @Column("bigint", { nullable: true, transformer: new BigIntTransformer() })
+    sizeBytes?: number;
+
+    @Column(() => MetadataEmbedding)
+    metadata!: MetadataEmbedding;
+
+    // @OneToMany(() => ArchiveChunk, archiveChunk => archiveChunk.chunk)
+    // archiveChunks?: ArchiveChunk[];
+}
