@@ -31,6 +31,8 @@ export default [
         rules: {
             // Disable rule no-inferrable-types
             "@typescript-eslint/no-inferrable-types": "off",
+            // Enable option ignoreRestSiblings for rule no-unused-vars
+            "@typescript-eslint/no-unused-vars": ["warn", { ignoreRestSiblings: true }],
         },
     },
 ];
