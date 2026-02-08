@@ -4,3 +4,4 @@ export * from "./entities/group.entity";
 export * from "./entities/host-address.entity";
 export * from "./entities/host.entity";
 export * from "./entities/namespace.entity";
+export * from "./entities/snapshot.entity";

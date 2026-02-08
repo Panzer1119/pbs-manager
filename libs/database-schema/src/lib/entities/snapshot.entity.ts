@@ -1,0 +1,33 @@
+import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { MetadataEmbedding } from "../embeddings/metadata.embedding";
+import { Group } from "./group.entity";
+
+@Entity()
+@Index(["group", "time"], { unique: true, where: '"metadata_deletion" IS NULL' })
+@Index(["group", "time", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+export class Snapshot {
+    @PrimaryGeneratedColumn("identity")
+    id!: number;
+
+    @Index()
+    @Column()
+    groupId!: number;
+
+    @ManyToOne(() => Group, group => group.snapshots, {
+        nullable: true,
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+    })
+    @JoinColumn({ referencedColumnName: "id" })
+    group?: Group;
+
+    @Index()
+    @Column("timestamptz")
+    time!: Date;
+
+    @Column(() => MetadataEmbedding)
+    metadata!: MetadataEmbedding;
+
+    // @OneToMany(() => Archive, archive => archive.snapshot)
+    // archives?: Archive[];
+}

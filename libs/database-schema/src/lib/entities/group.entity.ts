@@ -1,8 +1,9 @@
-import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Datastore } from "./datastore.entity";
 import { Namespace } from "./namespace.entity";
 import { BackupType } from "../types/backup.type";
+import { Snapshot } from "./snapshot.entity";
 
 @Entity()
 // Namespace, Type, Backup ID
@@ -58,6 +59,6 @@ export class Group {
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
-    // @OneToMany(() => Snapshot, snapshot => snapshot.group)
-    // snapshots?: Snapshot[];
+    @OneToMany(() => Snapshot, snapshot => snapshot.group)
+    snapshots?: Snapshot[];
 }
