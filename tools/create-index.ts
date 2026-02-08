@@ -7,7 +7,7 @@ export function createIndex(
     indexFileName: string,
     subDirName: string,
     suffix: string = ".ts",
-    lineSeparator: string = "\r\n"
+    lineSeparator: string = "\n"
 ) {
     console.log(`Creating ${indexFileName} for library ${libraryName}`);
     const src = `${path.dirname(__dirname)}/libs/${libraryName}/src`.replace(/\\/g, "/");
