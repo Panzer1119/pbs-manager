@@ -222,21 +222,12 @@ export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: st
 
 // Misc
 
-export function arrayFromAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-        const array: T[] = [];
-        iterable[Symbol.asyncIterator]()
-            .next()
-            .then(function process(result) {
-                if (result.done) {
-                    resolve(array);
-                } else {
-                    array.push(result.value);
-                    iterable[Symbol.asyncIterator]().next().then(process).catch(reject);
-                }
-            })
-            .catch(reject);
-    });
+export async function arrayFromAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<T[]> {
+    const array: T[] = [];
+    for await (const item of iterable) {
+        array.push(item);
+    }
+    return array;
 }
 
 export function buildIndexFileFindCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
