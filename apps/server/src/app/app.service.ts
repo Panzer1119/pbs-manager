@@ -3,9 +3,9 @@ import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
 import { DataSource, EntityManager, IsNull, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { Chunk, Datastore, Namespace } from "@pbs-manager/database-schema";
+import { BackupType, Chunk, Datastore, Group, Namespace } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
-import { ArchiveMetadata, buildIndexFileFindCommandArray, parseIndexFilePaths } from "./pbs-index";
+import { ArchiveMetadata, buildIndexFileFindCommandArray, GroupMetadata, parseIndexFilePaths } from "./pbs-index";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -114,11 +114,131 @@ export class AppService implements OnModuleInit {
                 );
                 this.logger.verbose(`Processed ${namespaces.length} namespaces for datastoreId ${datastoreId}`);
 
+                const groups: Group[] = await this.processGroups(
+                    entityManagerOuter,
+                    datastoreId,
+                    archivesOnDisk.map(archive => ({
+                        datastoreMountpoint: archive.datastoreMountpoint,
+                        namespaces: archive.namespaces,
+                        type: archive.type,
+                        id: archive.id,
+                    })),
+                    namespaces
+                );
+                this.logger.verbose(`Processed ${groups.length} groups for datastoreId ${datastoreId}`);
+                this.logger.verbose(groups);
+
                 //TODO
             });
         } catch (error) {
             this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
         }
+    }
+
+    private getNamespaceByPath(namespaces: Namespace[], pathParts: string[]): Namespace | null {
+        let currentNamespace: Namespace | null = null;
+        for (const pathPart of pathParts) {
+            const nextNamespace: Namespace | undefined = namespaces.find(
+                namespace =>
+                    namespace.name === pathPart &&
+                    namespace.parentId === (currentNamespace ? currentNamespace.id : null)
+            );
+            if (!nextNamespace) {
+                return null;
+            }
+            currentNamespace = nextNamespace;
+        }
+        return currentNamespace;
+    }
+
+    private groupToKey(group: Group): string {
+        return `${group.datastoreId}-${group.namespaceId ?? "null"}-${group.type}-${group.backupId}`;
+    }
+
+    private async processGroups(
+        entityManager: EntityManager,
+        datastoreId: number,
+        groupDataArray: GroupMetadata[],
+        namespaces: Namespace[]
+    ): Promise<Group[]> {
+        const groupsInDatabase: Group[] = await entityManager.find(Group, {
+            where: { datastoreId },
+            withDeleted: true,
+        });
+        const groupsInDatabaseMap: Record<string, Group> = {};
+        for (const group of groupsInDatabase) {
+            const key: string = this.groupToKey(group);
+            groupsInDatabaseMap[key] = group;
+        }
+        const groupKeysInDatabase: Set<string> = new Set(Object.keys(groupsInDatabaseMap));
+        const groupDataOnDiskMap: Record<string, GroupMetadata> = {};
+        for (const groupData of groupDataArray) {
+            const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
+            const key: string = `${datastoreId}-${namespace ? namespace.id : "null"}-${groupData.type}-${groupData.id}`;
+            groupDataOnDiskMap[key] = groupData;
+        }
+        const groupKeysOnDisk: Set<string> = new Set(Object.keys(groupDataOnDiskMap));
+        const groupKeysToCreate: Set<string> = new Set(groupKeysOnDisk);
+        const groupKeysToDelete: Set<string> = new Set(groupKeysInDatabase);
+        const groupKeysToRestore: Set<string> = new Set();
+
+        for (const groupKeyInDatabase of groupKeysInDatabase) {
+            groupKeysToCreate.delete(groupKeyInDatabase);
+        }
+
+        for (const groupKeyOnDisk of groupKeysOnDisk) {
+            groupKeysToDelete.delete(groupKeyOnDisk);
+        }
+
+        for (const groupInDatabase of groupsInDatabase) {
+            const key: string = this.groupToKey(groupInDatabase);
+            if (groupInDatabase.metadata.deletion != null && groupDataOnDiskMap[key]) {
+                groupKeysToRestore.add(key);
+            }
+        }
+
+        const groupsToDelete: Group[] = [...groupKeysToDelete].map(groupKey => groupsInDatabaseMap[groupKey]);
+        const groupsToRestore: Group[] = [...groupKeysToRestore].map(groupKey => groupsInDatabaseMap[groupKey]);
+        const groupsToReturn: Group[] = [...groupKeysInDatabase]
+            .filter(groupKey => !groupKeysToDelete.has(groupKey) && !groupKeysToRestore.has(groupKey))
+            .map(groupKey => groupsInDatabaseMap[groupKey]);
+
+        if (groupsToDelete.length > 0) {
+            this.logger.verbose(`Marking ${groupsToDelete.length} groups as deleted for datastoreId ${datastoreId}`);
+            await entityManager.softRemove(groupsToDelete, { chunk: 1000 }); //TODO Does this also save the entities?
+            this.logger.verbose(
+                `Marked  ${groupsToDelete.length} groups as deleted in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (groupsToRestore.length > 0) {
+            this.logger.verbose(`Marking ${groupsToRestore.length} groups as existing for datastoreId ${datastoreId}`);
+            const groupsRecovered: Group[] = await entityManager.recover(groupsToRestore, { chunk: 1000 }); //TODO Does this also save the entities?
+            groupsToReturn.push(...groupsRecovered);
+            this.logger.verbose(
+                `Marked  ${groupsToRestore.length} groups as existing in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (groupKeysToCreate.size > 0) {
+            const groupsToCreate: Group[] = [...groupKeysToCreate].map(groupKey => {
+                const groupData: GroupMetadata = groupDataOnDiskMap[groupKey];
+                const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
+                const group: Group = entityManager.create(Group, {
+                    datastoreId,
+                    namespaceId: namespace ? namespace.id : null,
+                    type: groupData.type as BackupType,
+                    backupId: groupData.id,
+                });
+                return group;
+            });
+            this.logger.verbose(`Creating ${groupsToCreate.length} new group entities for datastoreId ${datastoreId}`);
+            const groupsCreated: Group[] = await entityManager.save(groupsToCreate, { chunk: 1000 });
+            groupsToReturn.push(...groupsCreated);
+            this.logger.verbose(`Created  ${groupsToCreate.length} new group entities for datastoreId ${datastoreId}`);
+        }
+
+        return groupsToReturn;
     }
 
     private async processNamespaces(
@@ -234,6 +354,7 @@ export class AppService implements OnModuleInit {
                 namespace,
                 depth + 1
             );
+            namespace.children = childNamespaces;
             namespacesToReturn.push(...childNamespaces);
         }
 
