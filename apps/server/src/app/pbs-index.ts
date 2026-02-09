@@ -356,6 +356,7 @@ export function parseIndexFilePath(path: string, datastoreMountpoint?: string, h
     if (!groups) {
         throw new Error(`Groups are undefined: ${path}`);
     }
+    //TODO How do we handle ".zfs/snapshot/..." in the path?
     return {
         hostId,
         datastoreMountpoint: groups.datastoreMountpoint || datastoreMountpoint,
@@ -368,6 +369,7 @@ export function parseIndexFilePath(path: string, datastoreMountpoint?: string, h
     };
 }
 
+//TODO Replace the function in pbs.processor.ts with this function?
 export function parseIndexFilePaths(
     paths: string[],
     datastoreMountpoint?: string,

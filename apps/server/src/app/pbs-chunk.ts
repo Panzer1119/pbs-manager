@@ -123,6 +123,7 @@ export function parseChunkFilePath(
     if (!groups) {
         throw new Error(`Groups are undefined: ${path}`);
     }
+    //TODO How do we handle ".zfs/snapshot/..." in the path?
     return {
         hostId,
         datastoreMountpoint: groups.datastoreMountpoint || datastoreMountpoint,
@@ -131,6 +132,7 @@ export function parseChunkFilePath(
     };
 }
 
+//TODO Replace the function in pbs.processor.ts with this function (or the below one)?
 export function parseChunkFilePaths(
     paths: string[],
     datastoreMountpoint?: string,
@@ -149,6 +151,7 @@ export function parseChunkFilePaths(
     return pathsByDatastore;
 }
 
+//TODO Replace the function in pbs.processor.ts with this function (or the above one)?
 export function parseChunkFilePathsAndSizes(
     pathsAndSizes: string[][],
     datastoreMountpoint?: string,
