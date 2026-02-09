@@ -24,6 +24,7 @@ export type FILE_EXTENSION_DYNAMIC_INDEX = "didx";
 export type Index = DynamicIndex | FixedIndex;
 
 export interface BaseIndex {
+    path: string;
     magicNumberHex: string;
     uuid: string;
     creation: Date;
@@ -48,6 +49,7 @@ export interface Indices {
 }
 
 export interface ArchiveMetadata {
+    path: string;
     hostId?: number;
     datastoreMountpoint?: string;
     namespaces: string[];
@@ -149,7 +151,7 @@ function parseDynamicIndex(header: BaseIndex, data: Buffer): DynamicIndex {
     };
 }
 
-export function parseIndex(data: Buffer): Index {
+export function parseIndex(path: string, data: Buffer): Index {
     // Read the magic number code (8 bytes)
     const magicNumberHex: string = parseByteArrayAsHex(data, 8);
     // Read the uuid (16 bytes)
@@ -160,6 +162,7 @@ export function parseIndex(data: Buffer): Index {
     const checksumHex: string = parseByteArrayAsHex(data, 32, 32);
     // Build the header
     const header: BaseIndex = {
+        path,
         magicNumberHex,
         uuid: hexToUUID(uuidHex),
         creation: new Date(Number(creationTimeEpochSeconds) * 1000),
@@ -180,7 +183,7 @@ export function parseIndex(data: Buffer): Index {
 
 export function parseIndexFile(path: string): Index {
     const data: Buffer = readFileSync(path);
-    return parseIndex(data);
+    return parseIndex(path, data);
 }
 
 // Parse via SFTP
@@ -342,6 +345,7 @@ export function parseIndexFilePath(path: string, datastoreMountpoint?: string, h
     }
     //TODO How do we handle ".zfs/snapshot/..." in the path?
     return {
+        path,
         hostId,
         datastoreMountpoint: groups.datastoreMountpoint || datastoreMountpoint,
         namespaces: groups.namespace?.replace(/ns\//g, "")?.split("/"),
