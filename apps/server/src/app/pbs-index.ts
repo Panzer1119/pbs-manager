@@ -57,6 +57,13 @@ export interface ArchiveMetadata {
     extension: string;
 }
 
+export interface GroupMetadata {
+    datastoreMountpoint?: string;
+    namespaces: string[];
+    type: string;
+    id: string;
+}
+
 export const MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED =
     "42ab3807be8370a1";
 export const MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED =
