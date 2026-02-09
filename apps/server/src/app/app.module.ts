@@ -6,6 +6,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import configuration from "./config/configuration";
 import databaseConfig from "./config/database.config";
 import { ScheduleModule } from "@nestjs/schedule";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 
 @Module({
     imports: [
@@ -15,6 +16,7 @@ import { ScheduleModule } from "@nestjs/schedule";
             load: [configuration, databaseConfig],
         }),
         ScheduleModule.forRoot(),
+        EventEmitterModule.forRoot({ wildcard: true }),
         TypeOrmModule.forRootAsync(databaseConfig.asProvider()),
     ],
     controllers: [AppController],
