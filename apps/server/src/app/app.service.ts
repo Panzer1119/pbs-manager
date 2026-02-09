@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
-import { DataSource, EntityManager, UpdateResult } from "typeorm";
+import { DataSource, EntityManager, IsNull, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { Chunk, Datastore, Namespace } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
@@ -125,10 +125,11 @@ export class AppService implements OnModuleInit {
         entityManager: EntityManager,
         datastoreId: number,
         namespaceArrays: string[][],
-        parent: Namespace | null = null
+        parent: Namespace | null = null,
+        depth: number = 0
     ): Promise<Namespace[]> {
         const namespacesInDatabase: Namespace[] = await entityManager.find(Namespace, {
-            where: { datastoreId, parent },
+            where: { datastoreId, parentId: parent ? parent.id : IsNull() },
             withDeleted: true,
         });
 
@@ -156,26 +157,28 @@ export class AppService implements OnModuleInit {
         const namespacesToRestore: Namespace[] = namespacesInDatabase.filter(namespace =>
             namespaceNamesToRestore.has(namespace.name)
         );
-        const namespacesToReturn: Namespace[] = [];
+        const namespacesToReturn: Namespace[] = namespacesInDatabase.filter(
+            namespace => !namespaceNamesToDelete.has(namespace.name) && !namespaceNamesToRestore.has(namespace.name)
+        );
 
         if (namespacesToDelete.length > 0) {
             this.logger.verbose(
-                `Marking ${namespacesToDelete.length} namespaces as deleted for datastoreId ${datastoreId}`
+                `[${depth}] Marking ${namespacesToDelete.length} namespaces as deleted for datastoreId ${datastoreId}`
             );
             await entityManager.softRemove(namespacesToDelete, { chunk: 1000 }); //TODO Does this also save the entities?
             this.logger.verbose(
-                `Marked  ${namespacesToDelete.length} namespaces as deleted in the database for datastoreId ${datastoreId}`
+                `[${depth}] Marked  ${namespacesToDelete.length} namespaces as deleted in the database for datastoreId ${datastoreId}`
             );
         }
 
         if (namespacesToRestore.length > 0) {
             this.logger.verbose(
-                `Marking ${namespacesToRestore.length} namespaces as existing for datastoreId ${datastoreId}`
+                `[${depth}] Marking ${namespacesToRestore.length} namespaces as existing for datastoreId ${datastoreId}`
             );
             const namespacesRecovered: Namespace[] = await entityManager.recover(namespacesToRestore, { chunk: 1000 }); //TODO Does this also save the entities?
             namespacesToReturn.push(...namespacesRecovered);
             this.logger.verbose(
-                `Marked  ${namespacesToRestore.length} namespaces as existing in the database for datastoreId ${datastoreId}`
+                `[${depth}] Marked  ${namespacesToRestore.length} namespaces as existing in the database for datastoreId ${datastoreId}`
             );
         }
 
@@ -188,12 +191,12 @@ export class AppService implements OnModuleInit {
                 })
             );
             this.logger.verbose(
-                `Creating ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
+                `[${depth}] Creating ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
             );
             const namespacesCreated: Namespace[] = await entityManager.save(namespacesToCreate, { chunk: 1000 });
             namespacesToReturn.push(...namespacesCreated);
             this.logger.verbose(
-                `Created  ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
+                `[${depth}] Created  ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
             );
         }
 
@@ -219,14 +222,17 @@ export class AppService implements OnModuleInit {
             }
             const namespace: Namespace | undefined = namespaceNameMap[namespaceName];
             if (!namespace) {
-                this.logger.error(`Namespace ${namespaceName} not found in database for datastoreId ${datastoreId}`);
+                this.logger.error(
+                    `[${depth}] Namespace ${namespaceName} not found in database for datastoreId ${datastoreId}`
+                );
                 continue;
             }
             const childNamespaces: Namespace[] = await this.processNamespaces(
                 entityManager,
                 datastoreId,
                 childNamespaceArrays,
-                namespace
+                namespace,
+                depth + 1
             );
             namespacesToReturn.push(...childNamespaces);
         }
