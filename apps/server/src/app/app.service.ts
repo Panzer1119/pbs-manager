@@ -3,9 +3,25 @@ import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
 import { DataSource, EntityManager, IsNull, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { BackupType, Chunk, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
+import {
+    BackupType,
+    Chunk,
+    Datastore,
+    FileArchive,
+    Group,
+    ImageArchive,
+    Namespace,
+    Snapshot,
+} from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
-import { ArchiveMetadata, buildIndexFileFindCommandArray, GroupMetadata, parseIndexFilePaths } from "./pbs-index";
+import {
+    ArchiveMetadata,
+    buildIndexFileFindCommandArray,
+    GroupMetadata,
+    Indices,
+    parseIndexFilePaths,
+    parseRemoteIndexFilesWithSSHConnectionId,
+} from "./pbs-index";
 import { InjectQueue } from "@nestjs/bullmq";
 import { SSHProcessor } from "./ssh/ssh.processor";
 import { Queue } from "bullmq";
@@ -119,13 +135,99 @@ export class AppService implements OnModuleInit {
                 );
                 this.logger.verbose(`Processed ${namespaces.length} namespaces for datastoreId ${datastoreId}`);
 
-                const { groups, snapshots }: { groups: Group[]; snapshots: Snapshot[] } =
+                const {
+                    groups,
+                    snapshots,
+                    snapshotsByPath,
+                }: { groups: Group[]; snapshots: Snapshot[]; snapshotsByPath: Record<string, Snapshot> } =
                     await this.processGroupsAndSnapshots(entityManagerOuter, datastoreId, archivesOnDisk, namespaces);
                 this.logger.verbose(
                     `Processed ${groups.length} groups and ${snapshots.length} snapshots for datastoreId ${datastoreId}`
                 );
 
                 //TODO Process Index Files and links chunks to them
+
+                const archiveMetadataByPath: Record<string, ArchiveMetadata> = {};
+                for (const archiveMetadata of archivesOnDisk) {
+                    archiveMetadataByPath[archiveMetadata.path] = archiveMetadata;
+                }
+
+                this.logger.verbose(`Processing index files in partitions for datastoreId ${datastoreId}`);
+                const { dynamic, fixed }: Indices = await parseRemoteIndexFilesWithSSHConnectionId(
+                    entityManagerOuter,
+                    sshConnectionId,
+                    paths //.filter(_ => Math.random() >= 0.99).slice(0, 100)
+                );
+                this.logger.verbose(
+                    `Parsed ${dynamic.length} dynamic and ${fixed.length} fixed indices for datastoreId ${datastoreId}`
+                );
+
+                await entityManagerOuter.transaction(async entityManager => {
+                    const fileArchives: FileArchive[] = dynamic
+                        .map(index => {
+                            const archiveMetadata: ArchiveMetadata | undefined = archiveMetadataByPath[index.path];
+                            if (!archiveMetadata) {
+                                this.logger.error(`Archive metadata not found for index with path ${index.path}`);
+                                return null;
+                            }
+                            // const path: string = index.path.substring(
+                            //     index.path.length - 2 - archiveMetadata.extension.length,
+                            //     index.path.length - 1
+                            // );
+                            const snapshot: Snapshot | undefined = snapshotsByPath[index.path];
+                            if (!snapshot) {
+                                this.logger.error(`Snapshot not found for index with path ${index.path}`);
+                                return null;
+                            }
+                            return entityManager.create(FileArchive, {
+                                snapshotId: snapshot.id,
+                                name: archiveMetadata.name,
+                                uuid: index.uuid,
+                                creation: index.creation,
+                                indexHashSHA256: index.checksum,
+                            });
+                        })
+                        .filter(archive => archive !== null);
+                    // await entityManager.save(fileArchives, { chunk: 1000 });
+                    await entityManager.upsert(FileArchive, fileArchives, {
+                        conflictPaths: ["snapshotId", "type", "name"],
+                        upsertType: "on-conflict-do-update",
+                        // upsertType: "on-duplicate-key-update",
+                        indexPredicate: '"metadata_deletion" IS NULL',
+                    });
+                    this.logger.verbose(`Upserted ${fileArchives.length} file archives for datastoreId ${datastoreId}`);
+                    const imageArchives: ImageArchive[] = fixed.map(index => {
+                        const archiveMetadata: ArchiveMetadata | undefined = archiveMetadataByPath[index.path];
+                        if (!archiveMetadata) {
+                            this.logger.error(`Archive metadata not found for index with path ${index.path}`);
+                            return null;
+                        }
+                        const snapshot: Snapshot | undefined = snapshotsByPath[index.path];
+                        if (!snapshot) {
+                            this.logger.error(`Snapshot not found for index with path ${index.path}`);
+                            return null;
+                        }
+                        return entityManager.create(ImageArchive, {
+                            snapshotId: snapshot.id,
+                            name: archiveMetadata.name,
+                            uuid: index.uuid,
+                            creation: index.creation,
+                            indexHashSHA256: index.checksum,
+                            sizeBytes: index.sizeBytes,
+                            chunkSizeBytes: index.chunkSizeBytes,
+                        });
+                    });
+                    // await entityManager.save(imageArchives, { chunk: 1000 });
+                    await entityManager.upsert(ImageArchive, imageArchives, {
+                        conflictPaths: ["snapshotId", "type", "name"],
+                        upsertType: "on-conflict-do-update",
+                        // upsertType: "on-duplicate-key-update",
+                        indexPredicate: '"metadata_deletion" IS NULL',
+                    });
+                    this.logger.verbose(
+                        `Upserted ${imageArchives.length} image archives for datastoreId ${datastoreId}`
+                    );
+                });
             });
         } catch (error) {
             this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
@@ -166,6 +268,9 @@ export class AppService implements OnModuleInit {
     }
 
     private snapshotToKey(snapshot: Snapshot): string {
+        if (!snapshot.group) {
+            throw new Error(`Group not found for snapshot with id ${snapshot.id}`);
+        }
         return this.internalSnapshotToKey(snapshot.group.id, snapshot.time);
     }
 
@@ -182,7 +287,7 @@ export class AppService implements OnModuleInit {
         datastoreId: number,
         archiveMetadataArray: ArchiveMetadata[],
         namespaces: Namespace[]
-    ): Promise<{ groups: Group[]; snapshots: Snapshot[] }> {
+    ): Promise<{ groups: Group[]; snapshots: Snapshot[]; snapshotsByPath: Record<string, Snapshot> }> {
         const groupsInDatabase: Group[] = await entityManager.find(Group, {
             where: { datastoreId },
             withDeleted: true,
@@ -244,16 +349,24 @@ export class AppService implements OnModuleInit {
         }
 
         if (groupKeysToCreate.size > 0) {
-            const groupsToCreate: Group[] = [...groupKeysToCreate].map(groupKey => {
-                const groupData: GroupMetadata = groupDataOnDiskMap[groupKey];
-                const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
-                return entityManager.create(Group, {
-                    datastoreId,
-                    namespaceId: namespace ? namespace.id : null,
-                    type: groupData.type as BackupType,
-                    backupId: groupData.id,
-                });
-            });
+            const groupsToCreate: Group[] = [...groupKeysToCreate]
+                .map(groupKey => {
+                    const groupData: GroupMetadata = groupDataOnDiskMap[groupKey];
+                    if (!groupData) {
+                        this.logger.error(
+                            `Group data not found for group key ${groupKey} for datastoreId ${datastoreId}`
+                        );
+                        return null;
+                    }
+                    const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
+                    return entityManager.create(Group, {
+                        datastoreId,
+                        namespaceId: namespace ? namespace.id : null,
+                        type: groupData.type as BackupType,
+                        backupId: groupData.id,
+                    });
+                })
+                .filter(group => group !== null);
             this.logger.verbose(`Creating ${groupsToCreate.length} new group entities for datastoreId ${datastoreId}`);
             const groupsCreated: Group[] = await entityManager.save(groupsToCreate, { chunk: 1000 });
             groupsToReturn.push(...groupsCreated);
@@ -352,6 +465,7 @@ export class AppService implements OnModuleInit {
                     }
                     return entityManager.create(Snapshot, {
                         groupId: group.id,
+                        group,
                         time: new Date(archiveData.time),
                     });
                 })
@@ -366,7 +480,31 @@ export class AppService implements OnModuleInit {
             );
         }
 
-        return { groups: groupsToReturn, snapshots: snapshotsToReturn };
+        const snapshotsByPath: Record<string, Snapshot> = {};
+        for (const archiveData of archiveMetadataArray) {
+            const namespace: Namespace | null = this.getNamespaceByPath(namespaces, archiveData.namespaces);
+            const groupKey: string = this.groupMetadataToKey(datastoreId, namespace?.id, archiveData);
+            const group: Group | undefined = groupsToReturn.find(group => this.groupToKey(group) === groupKey);
+            if (!group) {
+                this.logger.error(
+                    `Group not found for snapshot with group key ${groupKey} for datastoreId ${datastoreId}`
+                );
+                continue;
+            }
+            const snapshotKey: string = this.snapshotMetadataToKey(group.id, archiveData);
+            const snapshot: Snapshot | undefined = snapshotsToReturn.find(
+                snapshot => this.snapshotToKey(snapshot) === snapshotKey
+            );
+            if (!snapshot) {
+                this.logger.error(
+                    `Snapshot not found for snapshot with key ${snapshotKey} for datastoreId ${datastoreId}`
+                );
+                continue;
+            }
+            snapshotsByPath[archiveData.path] = snapshot;
+        }
+
+        return { groups: groupsToReturn, snapshots: snapshotsToReturn, snapshotsByPath };
     }
 
     private async processNamespaces(
