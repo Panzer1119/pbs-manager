@@ -23,7 +23,7 @@ export type FILE_EXTENSION_DYNAMIC_INDEX = "didx";
 export type Index = DynamicIndex | FixedIndex;
 
 export interface BaseIndex {
-    magicNumber: string;
+    magicNumberHex: string;
     uuid: string;
     creation: Date;
     checksum: string;
@@ -31,12 +31,12 @@ export interface BaseIndex {
 }
 
 export interface DynamicIndex extends BaseIndex {
-    magicNumber: MAGIC_NUMBER_HEX_DYNAMIC_INDEX;
+    magicNumberHex: MAGIC_NUMBER_HEX_DYNAMIC_INDEX;
     offsets: number[];
 }
 
 export interface FixedIndex extends BaseIndex {
-    magicNumber: MAGIC_NUMBER_HEX_FIXED_INDEX;
+    magicNumberHex: MAGIC_NUMBER_HEX_FIXED_INDEX;
     sizeBytes: number;
     chunkSizeBytes: number;
 }
@@ -130,7 +130,7 @@ function parseFixedIndex(header: BaseIndex, data: Buffer): FixedIndex {
     const digests: string[] = parseDigestsBuffer(data.subarray(4096));
     return {
         ...header,
-        magicNumber: MAGIC_NUMBER_HEX_FIXED_INDEX,
+        magicNumberHex: MAGIC_NUMBER_HEX_FIXED_INDEX,
         sizeBytes: Number(sizeBytes),
         chunkSizeBytes: Number(chunkSizeBytes),
         digests,
@@ -142,15 +142,15 @@ function parseDynamicIndex(header: BaseIndex, data: Buffer): DynamicIndex {
     const [offsets, digests] = parseOffsetsAndDigestsBuffer(data.subarray(4096));
     return {
         ...header,
-        magicNumber: MAGIC_NUMBER_HEX_DYNAMIC_INDEX,
+        magicNumberHex: MAGIC_NUMBER_HEX_DYNAMIC_INDEX,
         offsets: offsets.map(offset => Number(offset)),
         digests,
     };
 }
 
 export function parseIndex(data: Buffer): Index {
-    // Read the magic code (8 bytes)
-    const magicHex: string = parseByteArrayAsHex(data, 8);
+    // Read the magic number code (8 bytes)
+    const magicNumberHex: string = parseByteArrayAsHex(data, 8);
     // Read the uuid (16 bytes)
     const uuidHex: string = parseByteArrayAsHex(data, 16, 8);
     // Read the creation time (epoch) (64 bits signed little-endian)
@@ -159,22 +159,22 @@ export function parseIndex(data: Buffer): Index {
     const checksumHex: string = parseByteArrayAsHex(data, 32, 32);
     // Build the header
     const header: BaseIndex = {
-        magicNumber: magicHex,
+        magicNumberHex,
         uuid: hexToUUID(uuidHex),
         creation: new Date(Number(creationTimeEpochSeconds) * 1000),
         checksum: checksumHex,
         digests: [],
     };
     // Check if the magic number is the fixed index magic number
-    if (magicHex === MAGIC_NUMBER_HEX_FIXED_INDEX) {
+    if (magicNumberHex === MAGIC_NUMBER_HEX_FIXED_INDEX) {
         return parseFixedIndex(header, data);
     }
     // Check if the magic number is the dynamic index magic number
-    if (magicHex === MAGIC_NUMBER_HEX_DYNAMIC_INDEX) {
+    if (magicNumberHex === MAGIC_NUMBER_HEX_DYNAMIC_INDEX) {
         return parseDynamicIndex(header, data);
     }
     // Throw an error if the magic number is unknown
-    throw new Error(`Unknown magic number: ${magicHex}`);
+    throw new Error(`Unknown magic number: ${magicNumberHex}`);
 }
 
 export function parseIndexFile(path: string): Index {
@@ -211,7 +211,7 @@ export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: st
         const index: Index = parseIndex(buffer);
         // Clear the buffer
         buffer.fill(0);
-        if (index.magicNumber === MAGIC_NUMBER_HEX_FIXED_INDEX) {
+        if (index.magicNumberHex === MAGIC_NUMBER_HEX_FIXED_INDEX) {
             fixedIndexArray.push(index as FixedIndex);
         } else {
             dynamicIndexArray.push(index as DynamicIndex);
