@@ -320,8 +320,13 @@ export class AppService implements OnModuleInit {
 
         for (const groupInDatabase of groupsInDatabase) {
             const key: string = this.groupToKey(groupInDatabase);
-            if (groupInDatabase.metadata.deletion != null && groupDataOnDiskMap[key]) {
+            if (groupInDatabase.metadata.deletion == null) {
+                continue;
+            }
+            if (groupDataOnDiskMap[key]) {
                 groupKeysToRestore.add(key);
+            } else {
+                groupKeysToDelete.delete(key);
             }
         }
 
@@ -414,8 +419,13 @@ export class AppService implements OnModuleInit {
 
         for (const snapshotInDatabase of snapshotsInDatabase) {
             const key: string = this.snapshotToKey(snapshotInDatabase);
-            if (snapshotInDatabase.metadata.deletion != null && snapshotDataOnDiskMap[key]) {
+            if (snapshotInDatabase.metadata.deletion == null) {
+                continue;
+            }
+            if (snapshotDataOnDiskMap[key]) {
                 snapshotKeysToRestore.add(key);
+            } else {
+                snapshotKeysToDelete.delete(key);
             }
         }
 
@@ -532,8 +542,13 @@ export class AppService implements OnModuleInit {
             namespaceNamesToDelete.delete(namespaceNameOnDisk);
         }
         for (const namespaceInDatabase of namespacesInDatabase) {
-            if (namespaceInDatabase.metadata.deletion != null && namespaceNamesOnDisk.has(namespaceInDatabase.name)) {
+            if (namespaceInDatabase.metadata.deletion == null) {
+                continue;
+            }
+            if (namespaceNamesOnDisk.has(namespaceInDatabase.name)) {
                 namespaceNamesToRestore.add(namespaceInDatabase.name);
+            } else {
+                namespaceNamesToDelete.delete(namespaceInDatabase.name);
             }
         }
 
@@ -723,11 +738,13 @@ export class AppService implements OnModuleInit {
                     }
 
                     for (const chunkInDatabase of chunksInDatabase) {
-                        if (
-                            chunkInDatabase.metadata_deletion != null &&
-                            hashesOnDisk.has(chunkInDatabase.hash_sha256)
-                        ) {
+                        if (chunkInDatabase.metadata_deletion == null) {
+                            continue;
+                        }
+                        if (hashesOnDisk.has(chunkInDatabase.hash_sha256)) {
                             hashesRevived.add(chunkInDatabase.hash_sha256);
+                        } else {
+                            hashesDeleted.delete(chunkInDatabase.hash_sha256);
                         }
                     }
 
