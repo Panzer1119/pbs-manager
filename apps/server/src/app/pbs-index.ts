@@ -5,6 +5,7 @@ import { NodeSSH } from "node-ssh";
 import { ReadStream, SFTPWrapper } from "ssh2";
 import { useSSHConnection } from "./ssh-utils";
 import { joinPosixPaths, normalizePosixPath } from "./common-utils";
+import { buffer } from "stream/consumers";
 
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED = "31b958426fb6a37f";
@@ -207,10 +208,10 @@ export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: st
     const dynamicIndexArray: DynamicIndex[] = [];
     for (const path of paths) {
         const readStream: ReadStream = sftp.createReadStream(path);
-        const buffer: Buffer = Buffer.concat(await arrayFromAsyncIterable(readStream));
-        const index: Index = parseIndex(buffer);
+        const data: Buffer = await buffer(readStream);
+        const index: Index = parseIndex(path, data);
         // Clear the buffer
-        buffer.fill(0);
+        data.fill(0);
         if (index.magicNumberHex === MAGIC_NUMBER_HEX_FIXED_INDEX) {
             fixedIndexArray.push(index as FixedIndex);
         } else {
@@ -221,14 +222,6 @@ export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: st
 }
 
 // Misc
-
-export async function arrayFromAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<T[]> {
-    const array: T[] = [];
-    for await (const item of iterable) {
-        array.push(item);
-    }
-    return array;
-}
 
 export function buildIndexFileFindCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
     // Normalize the mountpoint
