@@ -5,14 +5,13 @@ import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import configuration from "./config/configuration";
 import databaseConfig from "./config/database.config";
-import pushoverConfig from "./config/pushover.config";
 
 @Module({
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
             cache: true,
-            load: [configuration, databaseConfig, pushoverConfig],
+            load: [configuration, databaseConfig],
         }),
         TypeOrmModule.forRootAsync(databaseConfig.asProvider()),
     ],
