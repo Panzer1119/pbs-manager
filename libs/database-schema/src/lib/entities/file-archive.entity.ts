@@ -3,4 +3,4 @@ import { Archive } from "./archive.entity";
 import { ArchiveType } from "../types/archive.type";
 
 @ChildEntity(ArchiveType.File)
-export class PBSFileArchive extends Archive {}
+export class FileArchive extends Archive {}
