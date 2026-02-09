@@ -3,7 +3,7 @@ import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
 import { DataSource, EntityManager, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { Chunk, Datastore } from "@pbs-manager/database-schema";
+import { Chunk, Datastore, Namespace } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
 import { ArchiveMetadata, buildIndexFileFindCommandArray, parseIndexFilePaths } from "./pbs-index";
 
@@ -107,11 +107,131 @@ export class AppService implements OnModuleInit {
                 const archivesOnDisk: ArchiveMetadata[] = archivesByDatastore[datastoreMountpoint];
                 this.logger.verbose(`Found ${archivesOnDisk.length} archives on disk for datastoreId ${datastoreId}`);
 
+                const namespaces: Namespace[] = await this.processNamespaces(
+                    entityManagerOuter,
+                    datastoreId,
+                    archivesOnDisk.map(archive => archive.namespaces)
+                );
+                this.logger.verbose(`Processed ${namespaces.length} namespaces for datastoreId ${datastoreId}`);
+
                 //TODO
             });
         } catch (error) {
             this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
         }
+    }
+
+    private async processNamespaces(
+        entityManager: EntityManager,
+        datastoreId: number,
+        namespaceArrays: string[][],
+        parent: Namespace | null = null
+    ): Promise<Namespace[]> {
+        const namespacesInDatabase: Namespace[] = await entityManager.find(Namespace, {
+            where: { datastoreId, parent },
+            withDeleted: true,
+        });
+
+        const namespaceNamesOnDisk: Set<string> = new Set(namespaceArrays.map(array => array[0]));
+        const namespaceNamesInDatabase: Set<string> = new Set(namespacesInDatabase.map(namespace => namespace.name));
+        const namespaceNamesToCreate: Set<string> = new Set(namespaceNamesOnDisk);
+        const namespaceNamesToDelete: Set<string> = new Set(namespaceNamesInDatabase);
+        const namespaceNamesToRestore: Set<string> = new Set();
+
+        for (const namespaceNameInDatabase of namespaceNamesInDatabase) {
+            namespaceNamesToCreate.delete(namespaceNameInDatabase);
+        }
+        for (const namespaceNameOnDisk of namespaceNamesOnDisk) {
+            namespaceNamesToDelete.delete(namespaceNameOnDisk);
+        }
+        for (const namespaceInDatabase of namespacesInDatabase) {
+            if (namespaceInDatabase.metadata.deletion != null && namespaceNamesOnDisk.has(namespaceInDatabase.name)) {
+                namespaceNamesToRestore.add(namespaceInDatabase.name);
+            }
+        }
+
+        const namespacesToDelete: Namespace[] = namespacesInDatabase.filter(namespace =>
+            namespaceNamesToDelete.has(namespace.name)
+        );
+        const namespacesToRestore: Namespace[] = namespacesInDatabase.filter(namespace =>
+            namespaceNamesToRestore.has(namespace.name)
+        );
+        const namespacesToReturn: Namespace[] = [];
+
+        if (namespacesToDelete.length > 0) {
+            this.logger.verbose(
+                `Marking ${namespacesToDelete.length} namespaces as deleted for datastoreId ${datastoreId}`
+            );
+            await entityManager.softRemove(namespacesToDelete, { chunk: 1000 }); //TODO Does this also save the entities?
+            this.logger.verbose(
+                `Marked  ${namespacesToDelete.length} namespaces as deleted in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (namespacesToRestore.length > 0) {
+            this.logger.verbose(
+                `Marking ${namespacesToRestore.length} namespaces as existing for datastoreId ${datastoreId}`
+            );
+            const namespacesRecovered: Namespace[] = await entityManager.recover(namespacesToRestore, { chunk: 1000 }); //TODO Does this also save the entities?
+            namespacesToReturn.push(...namespacesRecovered);
+            this.logger.verbose(
+                `Marked  ${namespacesToRestore.length} namespaces as existing in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (namespaceNamesToCreate.size > 0) {
+            const namespacesToCreate: Namespace[] = [...namespaceNamesToCreate].map(namespaceName =>
+                entityManager.create(Namespace, {
+                    datastoreId,
+                    name: namespaceName,
+                    parent,
+                })
+            );
+            this.logger.verbose(
+                `Creating ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
+            );
+            const namespacesCreated: Namespace[] = await entityManager.save(namespacesToCreate, { chunk: 1000 });
+            namespacesToReturn.push(...namespacesCreated);
+            this.logger.verbose(
+                `Created  ${namespacesToCreate.length} new namespace entities for datastoreId ${datastoreId}`
+            );
+        }
+
+        const namespaceNameMap: Record<string, Namespace> = {};
+        for (const namespace of namespacesToReturn) {
+            namespaceNameMap[namespace.name] = namespace;
+        }
+
+        const childNamespaceArraysMap: Record<string, string[][]> = {};
+        for (const namespaceArray of namespaceArrays) {
+            const namespaceName: string = namespaceArray[0];
+            const childNamespaceArray: string[] = namespaceArray.slice(1);
+            if (childNamespaceArray.length === 0) {
+                continue;
+            }
+            childNamespaceArraysMap[namespaceName] ??= [];
+            childNamespaceArraysMap[namespaceName].push(childNamespaceArray);
+        }
+
+        for (const [namespaceName, childNamespaceArrays] of Object.entries(childNamespaceArraysMap)) {
+            if (childNamespaceArrays.length === 0) {
+                continue;
+            }
+            const namespace: Namespace | undefined = namespaceNameMap[namespaceName];
+            if (!namespace) {
+                this.logger.error(`Namespace ${namespaceName} not found in database for datastoreId ${datastoreId}`);
+                continue;
+            }
+            const childNamespaces: Namespace[] = await this.processNamespaces(
+                entityManager,
+                datastoreId,
+                childNamespaceArrays,
+                namespace
+            );
+            namespacesToReturn.push(...childNamespaces);
+        }
+
+        return namespacesToReturn;
     }
 
     async test(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
