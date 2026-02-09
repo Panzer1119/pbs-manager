@@ -332,7 +332,7 @@ export async function archiveToFilePath(
     }
     const datastore: Datastore | undefined = group.datastore;
     // Throw an error if the datastore is undefined
-    if (datastore != undefined) {
+    if (datastore == undefined) {
         throw new Error(`Datastore is undefined`);
     }
     return formatIndexFilePath(datastore, namespaces, group, snapshot, archive, datastoreMountpointParent);
