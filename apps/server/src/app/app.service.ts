@@ -3,7 +3,7 @@ import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { buildChunkFileFindAndStatCommandArray, ChunkMetadata, parseChunkFilePathsAndSizes } from "./pbs-chunk";
 import { DataSource, EntityManager, IsNull, UpdateResult } from "typeorm";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { BackupType, Chunk, Datastore, Group, Namespace } from "@pbs-manager/database-schema";
+import { BackupType, Chunk, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
 import { ArchiveMetadata, buildIndexFileFindCommandArray, GroupMetadata, parseIndexFilePaths } from "./pbs-index";
 
@@ -114,21 +114,13 @@ export class AppService implements OnModuleInit {
                 );
                 this.logger.verbose(`Processed ${namespaces.length} namespaces for datastoreId ${datastoreId}`);
 
-                const groups: Group[] = await this.processGroups(
-                    entityManagerOuter,
-                    datastoreId,
-                    archivesOnDisk.map(archive => ({
-                        datastoreMountpoint: archive.datastoreMountpoint,
-                        namespaces: archive.namespaces,
-                        type: archive.type,
-                        id: archive.id,
-                    })),
-                    namespaces
+                const { groups, snapshots }: { groups: Group[]; snapshots: Snapshot[] } =
+                    await this.processGroupsAndSnapshots(entityManagerOuter, datastoreId, archivesOnDisk, namespaces);
+                this.logger.verbose(
+                    `Processed ${groups.length} groups and ${snapshots.length} snapshots for datastoreId ${datastoreId}`
                 );
-                this.logger.verbose(`Processed ${groups.length} groups for datastoreId ${datastoreId}`);
-                this.logger.verbose(groups);
 
-                //TODO
+                //TODO Process Index Files and links chunks to them
             });
         } catch (error) {
             this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
@@ -152,19 +144,45 @@ export class AppService implements OnModuleInit {
     }
 
     private groupToKey(group: Group): string {
-        return `${group.datastoreId}-${group.namespaceId ?? "null"}-${group.type}-${group.backupId}`;
+        return this.internalGroupToKey(group.datastoreId, group.namespaceId, group.type, group.backupId);
     }
 
-    private async processGroups(
+    private groupMetadataToKey(datastoreId: number, namespaceId: number | null, groupMetadata: GroupMetadata): string {
+        return this.internalGroupToKey(datastoreId, namespaceId, groupMetadata.type as BackupType, groupMetadata.id);
+    }
+
+    private internalGroupToKey(
+        datastoreId: number,
+        namespaceId: number | null,
+        backupType: BackupType,
+        backupId: string
+    ): string {
+        return `${datastoreId}-${namespaceId ?? "null"}-${backupType}-${backupId}`;
+    }
+
+    private snapshotToKey(snapshot: Snapshot): string {
+        return this.internalSnapshotToKey(snapshot.group.id, snapshot.time);
+    }
+
+    private snapshotMetadataToKey(groupId: number, archiveMetadata: ArchiveMetadata): string {
+        return this.internalSnapshotToKey(groupId, new Date(archiveMetadata.time));
+    }
+
+    private internalSnapshotToKey(groupId: number, creation: Date): string {
+        return `${groupId}-${creation.getTime()}`;
+    }
+
+    private async processGroupsAndSnapshots(
         entityManager: EntityManager,
         datastoreId: number,
-        groupDataArray: GroupMetadata[],
+        archiveMetadataArray: ArchiveMetadata[],
         namespaces: Namespace[]
-    ): Promise<Group[]> {
+    ): Promise<{ groups: Group[]; snapshots: Snapshot[] }> {
         const groupsInDatabase: Group[] = await entityManager.find(Group, {
             where: { datastoreId },
             withDeleted: true,
         });
+
         const groupsInDatabaseMap: Record<string, Group> = {};
         for (const group of groupsInDatabase) {
             const key: string = this.groupToKey(group);
@@ -172,9 +190,9 @@ export class AppService implements OnModuleInit {
         }
         const groupKeysInDatabase: Set<string> = new Set(Object.keys(groupsInDatabaseMap));
         const groupDataOnDiskMap: Record<string, GroupMetadata> = {};
-        for (const groupData of groupDataArray) {
+        for (const groupData of archiveMetadataArray) {
             const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
-            const key: string = `${datastoreId}-${namespace ? namespace.id : "null"}-${groupData.type}-${groupData.id}`;
+            const key: string = this.groupMetadataToKey(datastoreId, namespace?.id, groupData);
             groupDataOnDiskMap[key] = groupData;
         }
         const groupKeysOnDisk: Set<string> = new Set(Object.keys(groupDataOnDiskMap));
@@ -205,7 +223,7 @@ export class AppService implements OnModuleInit {
 
         if (groupsToDelete.length > 0) {
             this.logger.verbose(`Marking ${groupsToDelete.length} groups as deleted for datastoreId ${datastoreId}`);
-            await entityManager.softRemove(groupsToDelete, { chunk: 1000 }); //TODO Does this also save the entities?
+            await entityManager.softRemove(groupsToDelete, { chunk: 1000 }); //TODO Does this also cascade to snapshots?
             this.logger.verbose(
                 `Marked  ${groupsToDelete.length} groups as deleted in the database for datastoreId ${datastoreId}`
             );
@@ -213,7 +231,7 @@ export class AppService implements OnModuleInit {
 
         if (groupsToRestore.length > 0) {
             this.logger.verbose(`Marking ${groupsToRestore.length} groups as existing for datastoreId ${datastoreId}`);
-            const groupsRecovered: Group[] = await entityManager.recover(groupsToRestore, { chunk: 1000 }); //TODO Does this also save the entities?
+            const groupsRecovered: Group[] = await entityManager.recover(groupsToRestore, { chunk: 1000 }); //TODO Does this also cascade to snapshots?
             groupsToReturn.push(...groupsRecovered);
             this.logger.verbose(
                 `Marked  ${groupsToRestore.length} groups as existing in the database for datastoreId ${datastoreId}`
@@ -224,13 +242,12 @@ export class AppService implements OnModuleInit {
             const groupsToCreate: Group[] = [...groupKeysToCreate].map(groupKey => {
                 const groupData: GroupMetadata = groupDataOnDiskMap[groupKey];
                 const namespace: Namespace | null = this.getNamespaceByPath(namespaces, groupData.namespaces);
-                const group: Group = entityManager.create(Group, {
+                return entityManager.create(Group, {
                     datastoreId,
                     namespaceId: namespace ? namespace.id : null,
                     type: groupData.type as BackupType,
                     backupId: groupData.id,
                 });
-                return group;
             });
             this.logger.verbose(`Creating ${groupsToCreate.length} new group entities for datastoreId ${datastoreId}`);
             const groupsCreated: Group[] = await entityManager.save(groupsToCreate, { chunk: 1000 });
@@ -238,7 +255,113 @@ export class AppService implements OnModuleInit {
             this.logger.verbose(`Created  ${groupsToCreate.length} new group entities for datastoreId ${datastoreId}`);
         }
 
-        return groupsToReturn;
+        const snapshotsInDatabase: Snapshot[] = await entityManager.find(Snapshot, {
+            where: { group: { datastoreId } },
+            relations: { group: true },
+            withDeleted: true,
+        });
+
+        const snapshotsInDatabaseMap: Record<string, Snapshot> = {};
+        for (const snapshot of snapshotsInDatabase) {
+            const key: string = this.snapshotToKey(snapshot);
+            snapshotsInDatabaseMap[key] = snapshot;
+        }
+        const snapshotKeysInDatabase: Set<string> = new Set(Object.keys(snapshotsInDatabaseMap));
+        const snapshotDataOnDiskMap: Record<string, ArchiveMetadata> = {};
+        for (const archiveData of archiveMetadataArray) {
+            const namespace: Namespace | null = this.getNamespaceByPath(namespaces, archiveData.namespaces);
+            const groupKey: string = this.groupMetadataToKey(datastoreId, namespace?.id, archiveData);
+            const group: Group | undefined = groupsToReturn.find(group => this.groupToKey(group) === groupKey);
+            if (!group) {
+                this.logger.error(
+                    `Group not found for snapshot with group key ${groupKey} for datastoreId ${datastoreId}`
+                );
+                continue;
+            }
+            const snapshotKey: string = this.snapshotMetadataToKey(group.id, archiveData);
+            snapshotDataOnDiskMap[snapshotKey] = archiveData;
+        }
+        const snapshotKeysOnDisk: Set<string> = new Set(Object.keys(snapshotDataOnDiskMap));
+        const snapshotKeysToCreate: Set<string> = new Set(snapshotKeysOnDisk);
+        const snapshotKeysToDelete: Set<string> = new Set(snapshotKeysInDatabase);
+        const snapshotKeysToRestore: Set<string> = new Set();
+
+        for (const snapshotKeyInDatabase of snapshotKeysInDatabase) {
+            snapshotKeysToCreate.delete(snapshotKeyInDatabase);
+        }
+
+        for (const snapshotKeyOnDisk of snapshotKeysOnDisk) {
+            snapshotKeysToDelete.delete(snapshotKeyOnDisk);
+        }
+
+        for (const snapshotInDatabase of snapshotsInDatabase) {
+            const key: string = this.snapshotToKey(snapshotInDatabase);
+            if (snapshotInDatabase.metadata.deletion != null && snapshotDataOnDiskMap[key]) {
+                snapshotKeysToRestore.add(key);
+            }
+        }
+
+        const snapshotsToDelete: Snapshot[] = [...snapshotKeysToDelete].map(
+            snapshotKey => snapshotsInDatabaseMap[snapshotKey]
+        );
+        const snapshotsToRestore: Snapshot[] = [...snapshotKeysToRestore].map(
+            snapshotKey => snapshotsInDatabaseMap[snapshotKey]
+        );
+        const snapshotsToReturn: Snapshot[] = [...snapshotKeysInDatabase]
+            .filter(snapshotKey => !snapshotKeysToDelete.has(snapshotKey) && !snapshotKeysToRestore.has(snapshotKey))
+            .map(snapshotKey => snapshotsInDatabaseMap[snapshotKey]);
+
+        if (snapshotsToDelete.length > 0) {
+            this.logger.verbose(
+                `Marking ${snapshotsToDelete.length} snapshots as deleted for datastoreId ${datastoreId}`
+            );
+            await entityManager.softRemove(snapshotsToDelete, { chunk: 1000 });
+            this.logger.verbose(
+                `Marked  ${snapshotsToDelete.length} snapshots as deleted in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (snapshotsToRestore.length > 0) {
+            this.logger.verbose(
+                `Marking ${snapshotsToRestore.length} snapshots as existing for datastoreId ${datastoreId}`
+            );
+            const snapshotsRecovered: Snapshot[] = await entityManager.recover(snapshotsToRestore, { chunk: 1000 });
+            snapshotsToReturn.push(...snapshotsRecovered);
+            this.logger.verbose(
+                `Marked  ${snapshotsToRestore.length} snapshots as existing in the database for datastoreId ${datastoreId}`
+            );
+        }
+
+        if (snapshotKeysToCreate.size > 0) {
+            const snapshotsToCreate: Snapshot[] = [...snapshotKeysToCreate]
+                .map(snapshotKey => {
+                    const archiveData: ArchiveMetadata = snapshotDataOnDiskMap[snapshotKey];
+                    const namespace: Namespace | null = this.getNamespaceByPath(namespaces, archiveData.namespaces);
+                    const groupKey: string = this.groupMetadataToKey(datastoreId, namespace?.id, archiveData);
+                    const group: Group | undefined = groupsToReturn.find(group => this.groupToKey(group) === groupKey);
+                    if (!group) {
+                        this.logger.error(
+                            `Group not found for snapshot with key ${snapshotKey} and group key ${groupKey} for datastoreId ${datastoreId}`
+                        );
+                        return null;
+                    }
+                    return entityManager.create(Snapshot, {
+                        groupId: group.id,
+                        time: new Date(archiveData.time),
+                    });
+                })
+                .filter(snapshot => snapshot !== null);
+            this.logger.verbose(
+                `Creating ${snapshotsToCreate.length} new snapshot entities for datastoreId ${datastoreId}`
+            );
+            const snapshotsCreated: Snapshot[] = await entityManager.save(snapshotsToCreate, { chunk: 1000 });
+            snapshotsToReturn.push(...snapshotsCreated);
+            this.logger.verbose(
+                `Created  ${snapshotsToCreate.length} new snapshot entities for datastoreId ${datastoreId}`
+            );
+        }
+
+        return { groups: groupsToReturn, snapshots: snapshotsToReturn };
     }
 
     private async processNamespaces(
@@ -285,7 +408,7 @@ export class AppService implements OnModuleInit {
             this.logger.verbose(
                 `[${depth}] Marking ${namespacesToDelete.length} namespaces as deleted for datastoreId ${datastoreId}`
             );
-            await entityManager.softRemove(namespacesToDelete, { chunk: 1000 }); //TODO Does this also save the entities?
+            await entityManager.softRemove(namespacesToDelete, { chunk: 1000 });
             this.logger.verbose(
                 `[${depth}] Marked  ${namespacesToDelete.length} namespaces as deleted in the database for datastoreId ${datastoreId}`
             );
@@ -295,7 +418,7 @@ export class AppService implements OnModuleInit {
             this.logger.verbose(
                 `[${depth}] Marking ${namespacesToRestore.length} namespaces as existing for datastoreId ${datastoreId}`
             );
-            const namespacesRecovered: Namespace[] = await entityManager.recover(namespacesToRestore, { chunk: 1000 }); //TODO Does this also save the entities?
+            const namespacesRecovered: Namespace[] = await entityManager.recover(namespacesToRestore, { chunk: 1000 });
             namespacesToReturn.push(...namespacesRecovered);
             this.logger.verbose(
                 `[${depth}] Marked  ${namespacesToRestore.length} namespaces as existing in the database for datastoreId ${datastoreId}`
@@ -376,9 +499,9 @@ export class AppService implements OnModuleInit {
                 const findCommandArray: string[] = buildChunkFileFindAndStatCommandArray(datastoreMountpoint, true);
                 this.logger.verbose(findCommandArray);
                 // const privateKey: string =
-                //     "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "TODO\n" + "-----END OPENSSH PRIVATE KEY-----";
-                // const publicKey: string = "ssh-ed25519 TODO";
-                // const fingerprint: string = "SHA256:TODO";
+                //     "-----BEGIN OPENSSH PRIVATE KEY-----\n" + "REDACTED\n" + "-----END OPENSSH PRIVATE KEY-----";
+                // const publicKey: string = "ssh-ed25519 REDACTED";
+                // const fingerprint: string = "SHA256:REDACTED";
                 // await this.dataSource.transaction(async entityManager => {
                 //     const sshKeypair: SSHKeypair = await entityManager.findOneBy(SSHKeypair, { id: 1 });
                 //     this.logger.verbose(sshKeypair);
