@@ -1,5 +1,5 @@
-import { join, normalize } from "path";
 import { Logger } from "@nestjs/common";
+import { joinPosixPaths, normalizePosixPath } from "./common-utils";
 
 export interface ChunkMetadata {
     hostId?: number;
@@ -10,31 +10,31 @@ export interface ChunkMetadata {
 
 export function buildChunkFileFindCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
     // Normalize the mountpoint
-    datastoreMountpoint = normalize(datastoreMountpoint);
+    datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
     // Build the command and arguments
     const command: string = sudo ? "sudo find" : "find";
-    const args: string[] = [join(datastoreMountpoint, ".chunks"), "-type", "f", "-print0"];
+    const args: string[] = [joinPosixPaths(datastoreMountpoint, ".chunks"), "-type", "f", "-print0"];
     // Build the command array
     return [command, ...args];
 }
 
 export function buildChunkFileFindAndStatCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
     // Normalize the mountpoint
-    datastoreMountpoint = normalize(datastoreMountpoint);
+    datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
     // Build the command and arguments
     const command: string = sudo ? "sudo find" : "find";
-    const args: string[] = [join(datastoreMountpoint, ".chunks"), "-type", "f", "-printf", "%p\\0%s\\0\\0"];
+    const args: string[] = [joinPosixPaths(datastoreMountpoint, ".chunks"), "-type", "f", "-printf", "%p\\0%s\\0\\0"];
     // Build the command array
     return [command, ...args];
 }
 
 export function buildChunkFileFindStatCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
     // Normalize the mountpoint
-    datastoreMountpoint = normalize(datastoreMountpoint);
+    datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
     // Build the command and arguments
     const command: string = sudo ? "sudo find" : "find";
     const args: string[] = [
-        join(datastoreMountpoint, ".chunks"),
+        joinPosixPaths(datastoreMountpoint, ".chunks"),
         "-type",
         "f",
         "-print0",
@@ -55,11 +55,11 @@ export function buildChunkFileFindStatCommandArray(datastoreMountpoint: string, 
 
 // export function buildChunkFileFindStatCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
 //     // Normalize the mountpoint
-//     datastoreMountpoint = normalize(datastoreMountpoint);
+//     datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
 //     // Build the command and arguments
 //     const command: string = sudo ? "sudo find" : "find";
 //     const args: string[] = [
-//         join(datastoreMountpoint, ".chunks"),
+//         joinPosixPaths(datastoreMountpoint, ".chunks"),
 //         "-type",
 //         "f",
 //         "-print0",
@@ -76,11 +76,11 @@ export function buildChunkFileFindStatCommandArray(datastoreMountpoint: string, 
 
 // export function buildChunkFileFindStatCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
 //     // Normalize the mountpoint
-//     datastoreMountpoint = normalize(datastoreMountpoint);
+//     datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
 //     // Build the command and arguments
 //     const command: string = sudo ? "sudo find" : "find";
 //     const args: string[] = [
-//         join(datastoreMountpoint, ".chunks"),
+//         joinPosixPaths(datastoreMountpoint, ".chunks"),
 //         "-type",
 //         "f",
 //         "-print0",
@@ -108,7 +108,7 @@ export function parseChunkFilePath(
     withSize: boolean = true
 ): ChunkMetadata {
     // Normalize path
-    path = normalize(path);
+    path = normalizePosixPath(path);
     // Match the path with the regular expression
     const match: RegExpMatchArray | null = withSize
         ? path.match(REG_EXP_CHUNK_FILE_PATH_WITH_SIZE)

@@ -3,8 +3,8 @@ import { EntityManager } from "typeorm";
 import { Archive, ArchiveType, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { NodeSSH } from "node-ssh";
 import { ReadStream, SFTPWrapper } from "ssh2";
-import { join, normalize } from "path";
 import { useSSHConnection } from "./ssh-utils";
+import { joinPosixPaths, normalizePosixPath } from "./common-utils";
 
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED = "31b958426fb6a37f";
@@ -241,13 +241,13 @@ export function arrayFromAsyncIterable<T>(iterable: AsyncIterable<T>): Promise<T
 
 export function buildIndexFileFindCommandArray(datastoreMountpoint: string, sudo: boolean = false): string[] {
     // Normalize the mountpoint
-    datastoreMountpoint = normalize(datastoreMountpoint);
+    datastoreMountpoint = normalizePosixPath(datastoreMountpoint);
     // Build the command and arguments
     const command: string = sudo ? "sudo find" : "find";
     const args: string[] = [
         datastoreMountpoint,
         "-path",
-        join(datastoreMountpoint, ".chunks"),
+        joinPosixPaths(datastoreMountpoint, ".chunks"),
         "-prune",
         "-o",
         "-type",
@@ -282,13 +282,13 @@ export function formatIndexFilePath(
     datastoreMountpointParent?: string
 ): string {
     // Format the parts of the path
-    const datastorePathPart: string = datastore.mountpoint ?? join(datastoreMountpointParent, datastore.name);
-    const namespacePathPart: string = join(...namespaces.flatMap(namespace => ["ns", namespace.name]));
-    const groupPathPart: string = join(group.type, group.backupId);
+    const datastorePathPart: string = datastore.mountpoint ?? joinPosixPaths(datastoreMountpointParent, datastore.name);
+    const namespacePathPart: string = joinPosixPaths(...namespaces.flatMap(namespace => ["ns", namespace.name]));
+    const groupPathPart: string = joinPosixPaths(group.type, group.backupId);
     const snapshotPathPart: string = snapshot.time.toISOString().replace(/\.000Z/m, "Z");
     const archivePathPart: string = `${archive.name}.${archiveTypeToFileExtension(archive.type)}`;
     // Join the parts of the path
-    return join(datastorePathPart, namespacePathPart, groupPathPart, snapshotPathPart, archivePathPart);
+    return joinPosixPaths(datastorePathPart, namespacePathPart, groupPathPart, snapshotPathPart, archivePathPart);
 }
 
 export async function archiveToFilePath(
@@ -343,7 +343,7 @@ export const REG_EXP_INDEX_FILE_PATH: RegExp =
 
 export function parseIndexFilePath(path: string, datastoreMountpoint?: string, hostId?: number): ArchiveMetadata {
     // Normalize path
-    path = normalize(path);
+    path = normalizePosixPath(path);
     // Match the path with the regular expression
     const match: RegExpMatchArray | null = path.match(REG_EXP_INDEX_FILE_PATH);
     // Throw an error if the path does not match the regular expression
