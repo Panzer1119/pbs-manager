@@ -1,7 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { InjectQueue } from "@nestjs/bullmq";
-import { SSHProcessor } from "./ssh.processor";
-import { Queue } from "bullmq";
+import {
+    SSHCommandData,
+    SSHCommandExecutionJob,
+    SSHCommandExecutionJobOptions,
+    SSHJobName,
+    SSHProcessor,
+} from "./ssh.processor";
+import { JobsOptions, Queue } from "bullmq";
+import { SSHConnectionData } from "../ssh-utils";
 
 @Injectable()
 export class SSHService implements OnModuleInit {
@@ -9,7 +16,7 @@ export class SSHService implements OnModuleInit {
 
     constructor(
         @InjectQueue(SSHProcessor.QUEUE_NAME)
-        private readonly sshQueue: Queue
+        private readonly sshQueue: Queue<unknown, unknown, SSHJobName>
     ) {}
 
     async onModuleInit(): Promise<void> {
@@ -23,5 +30,18 @@ export class SSHService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to drain ${JSON.stringify(SSHProcessor.QUEUE_NAME)} queue: ${error}`);
         }
+    }
+
+    async queueCommandExecution(
+        connection: SSHConnectionData,
+        command: SSHCommandData,
+        execOptions?: SSHCommandExecutionJobOptions,
+        options?: JobsOptions
+    ): Promise<SSHCommandExecutionJob> {
+        return (await this.sshQueue.add(
+            SSHProcessor.JOB_NAME_SSH_COMMAND_EXECUTION,
+            { connection, command, options: execOptions },
+            options
+        )) as SSHCommandExecutionJob;
     }
 }
