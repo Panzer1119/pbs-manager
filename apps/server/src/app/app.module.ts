@@ -10,6 +10,8 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { validate } from "./config/env.validation";
 import { BullModule } from "@nestjs/bullmq";
 import bullConfig, { createBullConfig } from "./config/queue.config";
+import { BullBoardModule } from "@bull-board/nestjs";
+import { ExpressAdapter } from "@bull-board/express";
 
 @Module({
     imports: [
@@ -25,6 +27,10 @@ import bullConfig, { createBullConfig } from "./config/queue.config";
             imports: [ConfigModule.forFeature(bullConfig)],
             useFactory: createBullConfig,
             inject: [ConfigService],
+        }),
+        BullBoardModule.forRoot({
+            route: "/queues", //TODO Make this configurable?
+            adapter: ExpressAdapter,
         }),
         TypeOrmModule.forRootAsync({
             imports: [ConfigModule.forFeature(databaseConfig)],
