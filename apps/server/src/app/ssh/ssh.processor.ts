@@ -34,7 +34,10 @@ export type SSHCommandExecutionJob = SSHJob<
     "ssh-command-execution"
 >;
 
-@Processor(SSHProcessor.QUEUE_NAME)
+@Processor(SSHProcessor.QUEUE_NAME, {
+    removeOnComplete: { age: 60 * 60, count: 10 },
+    removeOnFail: { age: 24 * 60 * 60, count: 100 },
+})
 export class SSHProcessor extends WorkerHost implements OnModuleInit {
     public static readonly QUEUE_NAME: string = "ssh";
     public static readonly JOB_NAME_SSH_COMMAND_EXECUTION: SSHJobName = "ssh-command-execution";
