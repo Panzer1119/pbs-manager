@@ -12,6 +12,7 @@ import { BullModule } from "@nestjs/bullmq";
 import bullConfig, { createBullConfig } from "./config/queue.config";
 import { BullBoardModule } from "@bull-board/nestjs";
 import { ExpressAdapter } from "@bull-board/express";
+import { SSHModule } from "./ssh/ssh.module";
 
 @Module({
     imports: [
@@ -37,6 +38,7 @@ import { ExpressAdapter } from "@bull-board/express";
             useFactory: createTypeORMConfig,
             inject: [ConfigService],
         }),
+        SSHModule,
     ],
     controllers: [AppController],
     providers: [AppService],
