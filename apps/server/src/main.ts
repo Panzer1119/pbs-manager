@@ -66,12 +66,12 @@ async function bootstrap(): Promise<Server> {
     logger.verbose("Start listening");
     const hostname: string = configService.get<string>("HOST", "localhost");
     const port: number = configService.get<number>("PORT", 3000);
+    const queueDashboardRoute: string = configService.get<string>("QUEUE_DASHBOARD_ROUTE", "/queues");
     return app.listen(port, hostname, async () => {
         const appUrl: string = await app.getUrl();
         logger.log(`🚀 ${appName} is running on: ${appUrl}`);
         logger.log(`Visit the Swagger API Documentation here: ${appUrl}${globalPrefix}`);
-        // Optional: Uncomment the following line to enable Bull Board UI
-        // logger.log(`Visit the Bull Board UI here: ${appUrl}${globalPrefix}/queues`); //TODO Make this configurable?
+        logger.log(`Visit the Bull Board UI here: ${appUrl}${globalPrefix}${queueDashboardRoute}`);
         // Optional: Uncomment the following line to enable Socket.IO Admin UI
         // logger.log(`Visit the Socket.IO Admin UI here: ${appUrl}/socket.io-admin-ui`); //TODO Make this configurable?
     });
