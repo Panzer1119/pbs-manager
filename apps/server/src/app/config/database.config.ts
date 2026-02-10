@@ -2,7 +2,7 @@ import { ConfigService, registerAs } from "@nestjs/config";
 import { TypeOrmModuleOptions } from "@nestjs/typeorm";
 import { entities, migrations } from "@pbs-manager/database-schema";
 import { SnakeNamingStrategy } from "typeorm-naming-strategies";
-import { IsFQDN, IsInt, IsNotEmpty, IsString, Max, Min } from "class-validator";
+import { IsFQDN, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from "class-validator";
 import { Type } from "class-transformer";
 
 export class DatabaseVariables {
@@ -12,6 +12,11 @@ export class DatabaseVariables {
         "DATABASE_NAME",
         "DATABASE_USERNAME",
         "DATABASE_PASSWORD",
+        "DATABASE_REDIS_HOST",
+        "DATABASE_REDIS_PORT",
+        "DATABASE_REDIS_USERNAME",
+        "DATABASE_REDIS_PASSWORD",
+        "DATABASE_REDIS_DB",
     ];
 
     @IsFQDN({ require_tld: false, allow_numeric_tld: true })
@@ -33,6 +38,34 @@ export class DatabaseVariables {
 
     @IsString()
     DATABASE_PASSWORD: string;
+
+    @IsOptional()
+    @IsFQDN({ require_tld: false, allow_numeric_tld: true })
+    DATABASE_REDIS_HOST: string | undefined;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    @Min(1024)
+    @Max(49151)
+    DATABASE_REDIS_PORT: number | undefined;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    DATABASE_REDIS_USERNAME: string | undefined;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    DATABASE_REDIS_PASSWORD: string | undefined;
+
+    @IsOptional()
+    @Type(() => Number)
+    @IsInt()
+    @Min(0)
+    @Max(15)
+    DATABASE_REDIS_DB: number | undefined;
 }
 
 export interface DatabaseConfig {
@@ -41,6 +74,13 @@ export interface DatabaseConfig {
     username: string;
     password: string;
     database: string;
+    redis: {
+        host?: string;
+        port?: number;
+        username?: string;
+        password?: string;
+        db?: number;
+    };
 }
 
 export default registerAs(
@@ -51,6 +91,13 @@ export default registerAs(
         database: process.env.DATABASE_NAME ?? "pbs_manager",
         username: process.env.DATABASE_USERNAME ?? "pbs_manager",
         password: process.env.DATABASE_PASSWORD,
+        redis: {
+            host: process.env.DATABASE_REDIS_HOST,
+            port: process.env.DATABASE_REDIS_PORT ? parseInt(process.env.DATABASE_REDIS_PORT) : 6379,
+            username: process.env.DATABASE_REDIS_USERNAME,
+            password: process.env.DATABASE_REDIS_PASSWORD,
+            db: process.env.DATABASE_REDIS_DB ? parseInt(process.env.DATABASE_REDIS_DB) : undefined,
+        },
     })
 );
 
@@ -68,6 +115,22 @@ export async function createTypeORMConfig(config: ConfigService): Promise<TypeOr
         username: databaseConfig.username,
         password: databaseConfig.password,
         namingStrategy: new SnakeNamingStrategy(),
+        cache:
+            databaseConfig.redis?.host == null
+                ? false
+                : {
+                      type: "ioredis",
+                      options: {
+                          host: databaseConfig.redis.host,
+                          port: databaseConfig.redis.port,
+                          username: databaseConfig.redis.username,
+                          password: databaseConfig.redis.password,
+                          db: databaseConfig.redis.db,
+                      },
+                      ignoreErrors: true,
+                      // alwaysEnabled: true,
+                      // duration: 10000, // 10 seconds
+                  },
         logger: "advanced-console",
         // logging: "all",
         // logging: true,
