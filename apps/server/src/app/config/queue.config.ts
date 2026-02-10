@@ -43,6 +43,7 @@ export class QueueVariables {
     QUEUE_REDIS_PASSWORD: string | undefined;
 
     @IsOptional()
+    @Type(() => Number)
     @IsInt()
     @Min(0)
     @Max(15)
