@@ -19,7 +19,7 @@ export type SSHCommandData =
       };
 
 export interface SSHCommandExecutionJobOptions extends SSHExecCommandOptions {
-    stream?: "stdout" | "stderr" | "both" | "stderr-to-job-log";
+    stream?: "stdout" | "stderr" | "both" | "both-stderr-to-job-log";
 }
 
 export interface SSHCommandExecutionJobData {
@@ -98,7 +98,7 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
                         if (parameters.length === 0 && !(options && "stream" in options)) {
                             return ssh.execCommand(command, options);
                         } else {
-                            if (options.stream === "both" || options.stream === "stderr-to-job-log") {
+                            if (options.stream === "both" || options.stream === "both-stderr-to-job-log") {
                                 return ssh.exec(command, parameters, { ...options, stream: "both" });
                             } else {
                                 return ssh.exec(
@@ -114,7 +114,7 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
                         typeof result === "object" &&
                         "stderr" in result &&
                         result.stderr != null &&
-                        options.stream === "stderr-to-job-log"
+                        options.stream === "both-stderr-to-job-log"
                     ) {
                         result.stderr.split(/\r|\n|\r\n/).forEach(line => job.log(line));
                         // delete result.stderr;
