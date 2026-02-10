@@ -308,8 +308,7 @@ export async function useSSHConnection<R>(
     if ("sshConnectionId" in connection) {
         const sshConnection: SSHConnection | undefined = await entityManager.findOne(SSHConnection, {
             where: { id: connection.sshConnectionId },
-            // relations: { sshKeypair: true, remoteHostKeys: true },
-            relations: { sshKeypair: true },
+            relations: { sshKeypair: true, remoteHostKeys: true },
         });
         if (!sshConnection) {
             throw new Error(`SSH connection with id ${JSON.stringify(connection.sshConnectionId)} not found`);
