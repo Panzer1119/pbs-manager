@@ -6,6 +6,9 @@ import { InjectDataSource } from "@nestjs/typeorm";
 import { BackupType, Chunk, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { useSSHConnection } from "./ssh-utils";
 import { ArchiveMetadata, buildIndexFileFindCommandArray, GroupMetadata, parseIndexFilePaths } from "./pbs-index";
+import { InjectQueue } from "@nestjs/bullmq";
+import { SSHProcessor } from "./ssh/ssh.processor";
+import { Queue } from "bullmq";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -46,7 +49,9 @@ export class AppService implements OnModuleInit {
 
     constructor(
         @InjectDataSource()
-        private readonly dataSource: DataSource
+        private readonly dataSource: DataSource,
+        @InjectQueue(SSHProcessor.QUEUE_NAME)
+        private readonly sshQueue: Queue
     ) {}
 
     getData(): { message: string } {
