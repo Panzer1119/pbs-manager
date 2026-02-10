@@ -14,6 +14,7 @@ import { BullBoardModule } from "@bull-board/nestjs";
 import { SSHModule } from "./ssh/ssh.module";
 import { SSHProcessor } from "./ssh/ssh.processor";
 import { ChunkModule } from "./chunk/chunk.module";
+import { DatastoreModule } from "./datastore/datastore.module";
 import pushoverConfig from "./config/pushover.config";
 
 @Module({
@@ -44,6 +45,7 @@ import pushoverConfig from "./config/pushover.config";
         SSHModule,
         BullModule.registerQueue({ name: SSHProcessor.QUEUE_NAME }),
         ChunkModule,
+        DatastoreModule,
     ],
     controllers: [AppController],
     providers: [AppService],
