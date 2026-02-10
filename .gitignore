@@ -3,6 +3,9 @@
 data-source.ts
 .env
 
+/swagger-spec.json
+/swagger-spec_agent.json
+
 # See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
 # compiled output
