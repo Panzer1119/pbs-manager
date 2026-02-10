@@ -160,7 +160,7 @@ export class AppService implements OnModuleInit {
                 const { dynamic, fixed }: Indices = await parseRemoteIndexFilesWithSSHConnectionId(
                     entityManagerOuter,
                     sshConnectionId,
-                    paths //.filter(_ => Math.random() >= 0.99).slice(0, 100)
+                    paths.filter(_ => Math.random() >= 0.99).slice(0, 100)
                 );
                 this.logger.verbose(
                     `Parsed ${dynamic.length} dynamic and ${fixed.length} fixed indices for datastoreId ${datastoreId}`
