@@ -11,7 +11,7 @@ import {
     PrivateKeyFormatType,
 } from "sshpk";
 import { DebugFunction, SyncHostVerifier } from "ssh2";
-import { Config, NodeSSH, SSHExecOptions } from "node-ssh";
+import { Config, NodeSSH } from "node-ssh";
 import { Logger } from "@nestjs/common";
 import { EntityManager } from "typeorm";
 import { SSHConnection } from "@pbs-manager/database-schema";
@@ -21,16 +21,7 @@ export type ParseKeyOptions = string | (Format.ReadOptions & { filename?: string
 export type WriteKeyOptions = Format.WriteOptions;
 export type KeyDataType = string | Buffer;
 export type FingerprintDataType = string | Buffer;
-export type SSHConnectionData =
-    | { sshConnectionId: number }
-    | {
-          host: string;
-          port: number;
-          username: string;
-          // password?: string;
-          privateKey?: string;
-          // passphrase?: string;
-      };
+export type SSHConnectionData = { sshConnectionId: number } | Config;
 
 export interface SSHKeyTransformerOptionsGeneric<T extends KeyFormatType> {
     format?: T;
@@ -250,26 +241,40 @@ export function createSyncHostVerifier(
     };
 }
 
-export function createSSHConfig(
-    host: string,
-    port: number,
-    username: string,
-    privateKey?: PrivateKey | string,
-    remoteHostKeys?: Key[],
+export async function createSSHConfig(
+    entityManager: EntityManager,
+    data: SSHConnectionData,
     debug?: DebugFunction
-): Config {
+): Promise<Config> {
+    if ("host" in data) {
+        return data;
+    } else if (!("sshConnectionId" in data)) {
+        throw new Error(`Invalid SSH connection data provided: ${JSON.stringify(data)}`);
+    }
+    const sshConnection: SSHConnection | null = await entityManager.findOne(SSHConnection, {
+        where: { id: data.sshConnectionId },
+        relations: { sshKeypair: true, remoteHostKeys: true },
+    });
+    if (!sshConnection) {
+        throw new Error(`SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
+    }
+    if (!sshConnection.sshKeypair) {
+        throw new Error(`SSH keypair for SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
+    }
     // Create the config
     const config: Config = {
-        host,
-        port,
-        username,
-        privateKey: privateKey?.toString("openssh"),
-        debug,
+        host: sshConnection.host,
+        port: sshConnection.port,
+        username: sshConnection.username,
+        password: sshConnection.password || undefined,
+        privateKey: sshConnection.sshKeypair?.privateKey?.toString("openssh") || undefined,
+        passphrase: sshConnection.sshKeypair?.passphrase || undefined,
     };
-    // Check if the private key is undefined
-    if (!config.privateKey) {
-        throw new Error("privateKey is undefined");
+    // Check if the private key and password are undefined
+    if (!config.privateKey && !config.password) {
+        throw new Error("Either privateKey or password must be defined");
     }
+    const remoteHostKeys: Key[] = sshConnection.remoteHostKeys?.map(remoteHostKey => remoteHostKey.publicKey) || [];
     // Check if the remote host keys are undefined or empty (i.e. no host verification)
     if (!remoteHostKeys?.length) {
         // Return the config
@@ -300,40 +305,14 @@ export function createSSHConfig(
 
 export async function useSSHConnection<R>(
     entityManager: EntityManager,
-    connection: SSHConnectionData,
-    options: SSHExecOptions,
-    callback: (client: NodeSSH, options?: SSHExecOptions) => Promise<R> | R
+    connectionData: SSHConnectionData,
+    callback: (client: NodeSSH) => Promise<R> | R
 ): Promise<R> {
-    let config: Config | undefined;
-    if ("sshConnectionId" in connection) {
-        const sshConnection: SSHConnection | undefined = await entityManager.findOne(SSHConnection, {
-            where: { id: connection.sshConnectionId },
-            relations: { sshKeypair: true, remoteHostKeys: true },
-        });
-        if (!sshConnection) {
-            throw new Error(`SSH connection with id ${JSON.stringify(connection.sshConnectionId)} not found`);
-        }
-        if (!sshConnection.sshKeypair) {
-            throw new Error(
-                `SSH keypair for SSH connection with id ${JSON.stringify(connection.sshConnectionId)} not found`
-            );
-        }
-        config = createSSHConfig(
-            sshConnection.host,
-            sshConnection.port,
-            sshConnection.username,
-            sshConnection.sshKeypair?.privateKey,
-            sshConnection.remoteHostKeys?.map(remoteHostKey => remoteHostKey.publicKey)
-        );
-    } else if ("host" in connection && "port" in connection && "username" in connection && "privateKey" in connection) {
-        config = createSSHConfig(connection.host, connection.port, connection.username, connection.privateKey);
-    } else {
-        throw new Error(`Invalid SSH connection data provided: ${JSON.stringify(connection)}`);
-    }
+    const config: Config = await createSSHConfig(entityManager, connectionData);
     const ssh: NodeSSH = new NodeSSH();
     await ssh.connect(config);
     try {
-        return await callback(ssh, options);
+        return await callback(ssh);
     } finally {
         ssh.dispose();
     }

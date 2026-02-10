@@ -193,7 +193,7 @@ export function parseRemoteIndexFilesWithSSHConnectionId(
     sshConnectionId: number,
     paths: string[]
 ): Promise<Indices> {
-    return useSSHConnection(transactionalEntityManager, { sshConnectionId }, null, ssh =>
+    return useSSHConnection(transactionalEntityManager, { sshConnectionId }, ssh =>
         parseRemoteIndexFilesWithSSH(ssh, paths)
     );
 }

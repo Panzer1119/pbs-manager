@@ -106,7 +106,7 @@ export class AppService implements OnModuleInit {
                     endTime,
                     response,
                 }: { startTime: number; endTime: number; response: string | SSHExecCommandResponse } =
-                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, options, async (ssh, options) =>
+                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, async ssh =>
                         this.executeAndTimeCommand(ssh, findCommandArray, options)
                     );
                 // this.logger.verbose(response);
@@ -686,7 +686,7 @@ export class AppService implements OnModuleInit {
                     endTime,
                     response,
                 }: { startTime: number; endTime: number; response: string | SSHExecCommandResponse } =
-                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, options, async (ssh, options) =>
+                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, async ssh =>
                         this.executeAndTimeCommand(ssh, findCommandArray, options)
                     );
                 // this.logger.verbose(response);
