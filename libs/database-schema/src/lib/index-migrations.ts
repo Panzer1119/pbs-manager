@@ -3,3 +3,4 @@ export * from "./migrations/1770561755454-CreateArchiveAndLinkItWithChunk";
 export * from "./migrations/1770561947959-AddSizeBytesAndChunkSizeBytesToArchive";
 export * from "./migrations/1770563892448-CreateSSHConnectionAndSSHKeypair";
 export * from "./migrations/1770706939695-AddPasswordToSSHConnection";
+export * from "./migrations/1770707113080-AddPassphraseToSSHKeyPair";

@@ -85,6 +85,9 @@ export class SSHKeypair {
     })
     privateKey?: PrivateKey;
 
+    @Column({ nullable: true })
+    passphrase?: string;
+
     @Index()
     @Column({
         type: "simple-enum",
