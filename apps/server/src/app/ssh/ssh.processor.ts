@@ -8,7 +8,11 @@ import { DataSource, EntityManager } from "typeorm";
 
 export type SSHJobName = "ssh-command-execution";
 
-export type SSHJob<DataType, ResultType, NameType extends SSHJobName> = Job<DataType, ResultType, NameType>;
+export type SSHJob<DataType, ResultType, NameType extends SSHJobName = SSHJobName> = Job<
+    DataType,
+    ResultType,
+    NameType
+>;
 
 export type SSHCommandData =
     | string
