@@ -69,8 +69,7 @@ async function bootstrap(): Promise<Server> {
     return app.listen(port, hostname, async () => {
         const appUrl: string = await app.getUrl();
         logger.log(`🚀 ${appName} is running on: ${appUrl}`);
-        // Optional: Uncomment the following line to enable Swagger API Documentation
-        // logger.log(`Visit the Swagger API Documentation here: ${appUrl}${globalPrefix}`);
+        logger.log(`Visit the Swagger API Documentation here: ${appUrl}${globalPrefix}`);
         // Optional: Uncomment the following line to enable Bull Board UI
         // logger.log(`Visit the Bull Board UI here: ${appUrl}${globalPrefix}/queues`); //TODO Make this configurable?
         // Optional: Uncomment the following line to enable Socket.IO Admin UI
