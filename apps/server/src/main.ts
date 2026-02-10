@@ -4,6 +4,8 @@ import { AppModule } from "./app/app.module";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { Server } from "net";
 import { MyLogger } from "./app/my-logger";
+import { DocumentBuilder, OpenAPIObject, SwaggerModule } from "@nestjs/swagger";
+import { writeFileSync } from "fs";
 
 const LOGGER_PREFIX: string = process.env.LOGGER_PREFIX ?? "Satisfactory Logistics Manager";
 const logger: MyLogger = new MyLogger("main", { prefix: LOGGER_PREFIX, timestamp: true });
@@ -21,10 +23,44 @@ async function bootstrap(): Promise<Server> {
     const globalPrefix: string = configService.get<string>("GLOBAL_PREFIX", "/api");
     app.setGlobalPrefix(globalPrefix);
 
+    logger.verbose("Creating Swagger document builder");
+    const appName: string = configService.get<string>("APP_NAME", "PBS Manager");
+    const config: Omit<OpenAPIObject, "paths"> = new DocumentBuilder()
+        .setTitle(`${appName}`)
+        .setDescription(`The ${appName} API Description`)
+        .setVersion("0.1")
+        .build();
+
+    logger.verbose("Creating Swagger document");
+    const isDev: boolean = configService.get<string>("NODE_ENV", "development") === "development";
+    const document: OpenAPIObject = SwaggerModule.createDocument(app, config);
+    if (isDev) {
+        const file = "./swagger-spec.json";
+        logger.verbose(`Writing Swagger document to ${JSON.stringify(file)}`);
+        writeFileSync(file, JSON.stringify(document, null, 4));
+    }
+
+    logger.verbose("Setting up SwaggerModule");
+    SwaggerModule.setup(globalPrefix, app, document, {
+        swaggerOptions: {
+            tagsSorter: (a, b) => {
+                const isADefault: boolean = a === "default";
+                const isBDefault: boolean = b === "default";
+                if (isADefault || isBDefault) {
+                    if (isADefault && isBDefault) {
+                        return 0;
+                    }
+                    return isADefault ? -1 : 1;
+                }
+                return a.localeCompare(b);
+            },
+            operationsSorter: (a, b) => a.get("id").localeCompare(b.get("id")),
+        },
+    });
+
     logger.verbose("Start listening");
     const hostname: string = configService.get<string>("HOST", "localhost");
     const port: number = configService.get<number>("PORT", 3000);
-    const appName: string = configService.get<string>("APP_NAME", "PBS Manager");
     return app.listen(port, hostname, async () => {
         const appUrl: string = await app.getUrl();
         logger.log(`🚀 ${appName} is running on: ${appUrl}`);
