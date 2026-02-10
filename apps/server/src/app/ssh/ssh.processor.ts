@@ -126,7 +126,9 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
                         result.stderr
                             .trim()
                             .split(/\r|\n|\r\n/)
-                            .forEach(line => job.log(line.trim()));
+                            .map(line => line.trim())
+                            .filter(line => !!line)
+                            .forEach(line => job.log(line));
                         // delete result.stderr;
                         return result.stdout; //TODO Do we want to keep the return code and signal? We could also add them to the job log if we want to keep them?
                     }
