@@ -77,7 +77,11 @@ export class AppService implements OnModuleInit {
     async onModuleInit(): Promise<void> {
         this.logger.log("AppService initialized");
         // await this.test();
-        await this.test2();
+        this.test2()
+            .then(() => this.logger.log("Test completed"))
+            .catch(error =>
+                this.logger.error(`Error in test: ${error instanceof Error ? error.message : String(error)}`)
+            );
     }
 
     async test2(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
