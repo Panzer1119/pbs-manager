@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { DatastoreService } from "./datastore.service";
 
-@Module({})
+@Module({
+    providers: [DatastoreService],
+})
 export class DatastoreModule {}
