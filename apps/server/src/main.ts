@@ -25,7 +25,15 @@ async function bootstrap(): Promise<Server> {
 
     logger.verbose("Setting up global prefix");
     const globalPrefix: string = configService.get<string>("GLOBAL_PREFIX", "/api");
-    app.setGlobalPrefix(globalPrefix);
+    const globalPrefixExcludes: string[] = configService
+        .get<string>("GLOBAL_PREFIX_EXCLUDES", "")
+        .split(",")
+        .map(s => s.trim())
+        .filter(s => s !== "");
+    if (globalPrefixExcludes.length > 0) {
+        logger.verbose(`Global prefix excludes: ${JSON.stringify(globalPrefixExcludes)}`);
+    }
+    app.setGlobalPrefix(globalPrefix, { exclude: globalPrefixExcludes });
 
     logger.verbose("Creating Swagger document builder");
     const appName: string = configService.get<string>("APP_NAME", "PBS Manager");
@@ -71,7 +79,9 @@ async function bootstrap(): Promise<Server> {
         const appUrl: string = await app.getUrl();
         logger.log(`🚀 ${appName} is running on: ${appUrl}`);
         logger.log(`Visit the Swagger API Documentation here: ${appUrl}${globalPrefix}`);
-        logger.log(`Visit the Bull Board UI here: ${appUrl}${globalPrefix}${queueDashboardRoute}`);
+        logger.log(
+            `Visit the Bull Board UI here: ${appUrl}${globalPrefixExcludes.includes(queueDashboardRoute) ? "" : globalPrefix}${queueDashboardRoute}`
+        );
         // Optional: Uncomment the following line to enable Socket.IO Admin UI
         // logger.log(`Visit the Socket.IO Admin UI here: ${appUrl}/socket.io-admin-ui`); //TODO Make this configurable?
     });
