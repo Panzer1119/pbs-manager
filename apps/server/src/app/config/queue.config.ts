@@ -42,12 +42,11 @@ export class QueueVariables {
     @IsNotEmpty()
     QUEUE_REDIS_PASSWORD: string | undefined;
 
-    @IsOptional()
     @Type(() => Number)
     @IsInt()
     @Min(0)
     @Max(15)
-    QUEUE_REDIS_DB: number | undefined;
+    QUEUE_REDIS_DB: number = 0;
 
     @IsOptional()
     @IsString()
@@ -73,9 +72,9 @@ export class QueueVariables {
 export interface QueueConfig {
     host: string;
     port: number;
+    database: number;
     username?: string;
     password?: string;
-    database?: number;
     prefix?: string;
     dashboard: {
         route: string;
@@ -85,29 +84,32 @@ export interface QueueConfig {
     };
 }
 
-export default registerAs("queue", () => ({
-    host: process.env.QUEUE_REDIS_HOST ?? "localhost",
-    port: process.env.QUEUE_REDIS_PORT ?? 6379,
-    username: process.env.QUEUE_REDIS_USERNAME,
-    password: process.env.QUEUE_REDIS_PASSWORD,
-    database: process.env.QUEUE_REDIS_DB,
-    prefix: process.env.QUEUE_PREFIX,
-    dashboard: {
-        route: process.env.QUEUE_DASHBOARD_ROUTE ?? "/queues",
-        basePath: process.env.QUEUE_DASHBOARD_BASE_PATH,
-        username: process.env.QUEUE_DASHBOARD_USERNAME,
-        password: process.env.QUEUE_DASHBOARD_PASSWORD ?? "",
-    },
-}));
+export default registerAs(
+    "queue",
+    (): QueueConfig => ({
+        host: process.env.QUEUE_REDIS_HOST ?? "localhost",
+        port: process.env.QUEUE_REDIS_PORT ? parseInt(process.env.QUEUE_REDIS_PORT) : 6379,
+        database: process.env.QUEUE_REDIS_DB ? parseInt(process.env.QUEUE_REDIS_DB) : 0,
+        username: process.env.QUEUE_REDIS_USERNAME,
+        password: process.env.QUEUE_REDIS_PASSWORD,
+        prefix: process.env.QUEUE_PREFIX,
+        dashboard: {
+            route: process.env.QUEUE_DASHBOARD_ROUTE ?? "/queues",
+            basePath: process.env.QUEUE_DASHBOARD_BASE_PATH,
+            username: process.env.QUEUE_DASHBOARD_USERNAME,
+            password: process.env.QUEUE_DASHBOARD_PASSWORD ?? "",
+        },
+    })
+);
 
 export async function createBullConfig(config: ConfigService): Promise<BullRootModuleOptions> {
     const queueConfig: QueueConfig = config.get<QueueConfig>("queue");
     const redisOptions: Redis.RedisOptions = {
         host: queueConfig.host,
         port: queueConfig.port,
+        db: queueConfig.database,
         username: queueConfig.username,
         password: queueConfig.password,
-        db: queueConfig.database,
     };
     return <Bull.QueueOptions>{
         connection: redisOptions,
