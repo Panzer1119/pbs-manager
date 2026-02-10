@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Logger, OnModuleInit } from "@nestjs/common";
 import { Job } from "bullmq";
-import { NodeSSH, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
+import { NodeSSH, SSHExecCommandOptions, SSHExecCommandResponse, SSHExecOptions } from "node-ssh";
 import { SSHConnectionData, useSSHConnection } from "../ssh-utils";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource, EntityManager } from "typeorm";
@@ -18,9 +18,9 @@ export type SSHCommandData =
           arguments?: string[];
       };
 
-export type SSHCommandExecutionJobOptions = SSHExecOptions & {
-    stderrToJobLog?: boolean;
-};
+export interface SSHCommandExecutionJobOptions extends SSHExecCommandOptions {
+    stream?: "stdout" | "stderr" | "both" | "stderr-to-job-log";
+}
 
 export interface SSHCommandExecutionJobData {
     connection: SSHConnectionData;
@@ -70,7 +70,6 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
     ): Promise<SSHCommandExecutionJobResult> {
         const data: SSHCommandExecutionJobData = job.data;
         const options: SSHCommandExecutionJobOptions = data.options || {};
-        options.stderrToJobLog ??= true;
         this.logger.verbose(
             `Executing SSH command with data: ${JSON.stringify(data)} and token: ${JSON.stringify(token)}`
         );
@@ -99,8 +98,8 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
                         if (parameters.length === 0 && !(options && "stream" in options)) {
                             return ssh.execCommand(command, options);
                         } else {
-                            if (options.stream === "both") {
-                                return ssh.exec(command, parameters, options as SSHExecOptions & { stream: "both" });
+                            if (options.stream === "both" || options.stream === "stderr-to-job-log") {
+                                return ssh.exec(command, parameters, { ...options, stream: "both" });
                             } else {
                                 return ssh.exec(
                                     command,
@@ -111,8 +110,15 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
                         }
                     }
                 ).then((result: SSHCommandExecutionJobResult): SSHCommandExecutionJobResult => {
-                    if (options.stderrToJobLog && typeof result === "object" && "stderr" in result) {
-                        result.stderr.split("\n").forEach(line => job.log(line));
+                    if (
+                        typeof result === "object" &&
+                        "stderr" in result &&
+                        result.stderr != null &&
+                        options.stream === "stderr-to-job-log"
+                    ) {
+                        result.stderr.split(/\r|\n|\r\n/).forEach(line => job.log(line));
+                        // delete result.stderr;
+                        return result.stdout; //TODO Do we want to keep the return code and signal? We could also add them to the job log if we want to keep them?
                     }
                     return result;
                 })
