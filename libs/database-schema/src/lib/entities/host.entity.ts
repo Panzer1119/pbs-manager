@@ -1,7 +1,18 @@
-import { Column, Entity, Index, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn } from "typeorm";
+import {
+    Column,
+    Entity,
+    Index,
+    JoinColumn,
+    JoinTable,
+    ManyToMany,
+    OneToMany,
+    OneToOne,
+    PrimaryGeneratedColumn,
+} from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { HostAddress } from "./host-address.entity";
 import { Datastore } from "./datastore.entity";
+import { SSHConnection } from "./ssh-connection.entity";
 
 @Entity()
 export class Host {
@@ -19,6 +30,13 @@ export class Host {
     @OneToOne(() => HostAddress, hostAddress => hostAddress.host)
     @JoinColumn()
     address?: HostAddress;
+
+    @ManyToMany(() => SSHConnection, sshConnection => sshConnection.hosts, {
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+    })
+    @JoinTable({ name: "host_ssh_connections" })
+    sshConnections?: SSHConnection[];
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;

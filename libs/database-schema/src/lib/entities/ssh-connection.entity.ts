@@ -1,6 +1,7 @@
 import { Column, Entity, Index, JoinColumn, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { SSHKeypair } from "./ssh-keypair.entity";
+import { Host } from "./host.entity";
 
 @Entity()
 export class SSHConnection {
@@ -47,4 +48,10 @@ export class SSHConnection {
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
+
+    @ManyToMany(() => Host, host => host.sshConnections, {
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+    })
+    hosts?: Host[];
 }
