@@ -23,6 +23,9 @@ export class SSHConnection {
     @Column({ length: 255 })
     username!: string;
 
+    @Column({ nullable: true })
+    password?: string;
+
     @Index()
     @Column()
     sshKeypairId!: number;
