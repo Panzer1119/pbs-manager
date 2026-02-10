@@ -13,6 +13,7 @@ import bullConfig, { createBullConfig } from "./config/queue.config";
 import { BullBoardModule } from "@bull-board/nestjs";
 import { ExpressAdapter } from "@bull-board/express";
 import { SSHModule } from "./ssh/ssh.module";
+import { SSHProcessor } from "./ssh/ssh.processor";
 
 @Module({
     imports: [
@@ -39,6 +40,7 @@ import { SSHModule } from "./ssh/ssh.module";
             inject: [ConfigService],
         }),
         SSHModule,
+        BullModule.registerQueue({ name: SSHProcessor.QUEUE_NAME }),
     ],
     controllers: [AppController],
     providers: [AppService],
