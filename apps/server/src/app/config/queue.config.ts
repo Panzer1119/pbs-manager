@@ -132,7 +132,7 @@ export async function createBullBoardConfig(config: ConfigService): Promise<Bull
         boardOptions: {
             uiConfig: {
                 dateFormats: {
-                    short: "hh:mm:ss",
+                    short: "HH:mm:ss",
                     common: "yyyy-MM-dd HH:mm:ss",
                     full: "yyyy-MM-dd HH:mm:ss",
                 },
