@@ -9,9 +9,8 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { validate } from "./config/env.validation";
 import { BullModule } from "@nestjs/bullmq";
-import bullConfig, { createBullConfig } from "./config/queue.config";
+import bullConfig, { createBullBoardConfig, createBullConfig } from "./config/queue.config";
 import { BullBoardModule } from "@bull-board/nestjs";
-import { ExpressAdapter } from "@bull-board/express";
 import { SSHModule } from "./ssh/ssh.module";
 import { SSHProcessor } from "./ssh/ssh.processor";
 
@@ -30,9 +29,10 @@ import { SSHProcessor } from "./ssh/ssh.processor";
             useFactory: createBullConfig,
             inject: [ConfigService],
         }),
-        BullBoardModule.forRoot({
-            route: "/queues", //TODO Make this configurable?
-            adapter: ExpressAdapter,
+        BullBoardModule.forRootAsync({
+            imports: [ConfigModule.forFeature(bullConfig)],
+            useFactory: createBullBoardConfig,
+            inject: [ConfigService],
         }),
         TypeOrmModule.forRootAsync({
             imports: [ConfigModule.forFeature(databaseConfig)],

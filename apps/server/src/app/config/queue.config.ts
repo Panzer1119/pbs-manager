@@ -4,6 +4,10 @@ import { Type } from "class-transformer";
 import { BullRootModuleOptions } from "@nestjs/bullmq";
 import * as Redis from "ioredis";
 import * as Bull from "bullmq";
+import { BullBoardModuleOptions } from "@bull-board/nestjs/src/bull-board.types";
+import { ExpressAdapter } from "@bull-board/express";
+import basicAuth from "express-basic-auth";
+import { RequestHandler } from "express";
 
 export class QueueVariables {
     public static readonly ENV_KEYS: (keyof QueueVariables)[] = [
@@ -13,6 +17,10 @@ export class QueueVariables {
         "QUEUE_REDIS_PASSWORD",
         "QUEUE_REDIS_DB",
         "QUEUE_PREFIX",
+        "QUEUE_DASHBOARD_ROUTE",
+        "QUEUE_DASHBOARD_BASE_PATH",
+        "QUEUE_DASHBOARD_USERNAME",
+        "QUEUE_DASHBOARD_PASSWORD",
     ];
 
     @IsFQDN({ require_tld: false, allow_numeric_tld: true })
@@ -43,6 +51,22 @@ export class QueueVariables {
     @IsOptional()
     @IsString()
     QUEUE_PREFIX: string | undefined;
+
+    @IsString()
+    QUEUE_DASHBOARD_ROUTE: string = "/queues";
+
+    @IsOptional()
+    @IsString()
+    QUEUE_DASHBOARD_BASE_PATH: string | undefined;
+
+    @IsOptional()
+    @IsString()
+    @IsNotEmpty()
+    QUEUE_DASHBOARD_USERNAME: string | undefined;
+
+    @IsOptional()
+    @IsString()
+    QUEUE_DASHBOARD_PASSWORD: string | undefined;
 }
 
 export interface QueueConfig {
@@ -52,6 +76,12 @@ export interface QueueConfig {
     password?: string;
     database?: number;
     prefix?: string;
+    dashboard: {
+        route: string;
+        basePath?: string;
+        username?: string;
+        password?: string;
+    };
 }
 
 export default registerAs("queue", () => ({
@@ -61,6 +91,12 @@ export default registerAs("queue", () => ({
     password: process.env.QUEUE_REDIS_PASSWORD,
     database: process.env.QUEUE_REDIS_DB,
     prefix: process.env.QUEUE_PREFIX,
+    dashboard: {
+        route: process.env.QUEUE_DASHBOARD_ROUTE ?? "/queues",
+        basePath: process.env.QUEUE_DASHBOARD_BASE_PATH,
+        username: process.env.QUEUE_DASHBOARD_USERNAME,
+        password: process.env.QUEUE_DASHBOARD_PASSWORD ?? "",
+    },
 }));
 
 export async function createBullConfig(config: ConfigService): Promise<BullRootModuleOptions> {
@@ -75,5 +111,31 @@ export async function createBullConfig(config: ConfigService): Promise<BullRootM
     return <Bull.QueueOptions>{
         connection: redisOptions,
         prefix: queueConfig.prefix,
+    };
+}
+
+export async function createBullBoardConfig(config: ConfigService): Promise<BullBoardModuleOptions> {
+    const queueConfig: QueueConfig = config.get<QueueConfig>("queue");
+    const middleware: RequestHandler | undefined =
+        queueConfig.dashboard?.username != null
+            ? basicAuth({
+                  challenge: true,
+                  users: { [queueConfig.dashboard.username]: queueConfig.dashboard.password },
+              })
+            : undefined;
+    return <BullBoardModuleOptions>{
+        route: queueConfig.dashboard?.route || "/queues",
+        adapter: ExpressAdapter,
+        boardOptions: {
+            uiConfig: {
+                dateFormats: {
+                    short: "hh:mm:ss",
+                    common: "yyyy-MM-dd HH:mm:ss",
+                    full: "yyyy-MM-dd HH:mm:ss",
+                },
+            },
+            uiBasePath: queueConfig.dashboard?.basePath,
+        },
+        middleware,
     };
 }
