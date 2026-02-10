@@ -13,13 +13,14 @@ import bullConfig, { createBullBoardConfig, createBullConfig } from "./config/qu
 import { BullBoardModule } from "@bull-board/nestjs";
 import { SSHModule } from "./ssh/ssh.module";
 import { SSHProcessor } from "./ssh/ssh.processor";
+import pushoverConfig from "./config/pushover.config";
 
 @Module({
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
             cache: true,
-            load: [configuration, databaseConfig],
+            load: [configuration, databaseConfig, pushoverConfig],
             validate,
         }),
         ScheduleModule.forRoot(),
