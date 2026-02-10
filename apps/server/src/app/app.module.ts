@@ -8,6 +8,8 @@ import databaseConfig, { createTypeORMConfig } from "./config/database.config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { validate } from "./config/env.validation";
+import { BullModule } from "@nestjs/bullmq";
+import bullConfig, { createBullConfig } from "./config/queue.config";
 
 @Module({
     imports: [
@@ -19,6 +21,11 @@ import { validate } from "./config/env.validation";
         }),
         ScheduleModule.forRoot(),
         EventEmitterModule.forRoot({ wildcard: true }),
+        BullModule.forRootAsync({
+            imports: [ConfigModule.forFeature(bullConfig)],
+            useFactory: createBullConfig,
+            inject: [ConfigService],
+        }),
         TypeOrmModule.forRootAsync({
             imports: [ConfigModule.forFeature(databaseConfig)],
             useFactory: createTypeORMConfig,

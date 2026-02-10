@@ -1,6 +1,7 @@
 import { IsEnum, IsFQDN, IsInt, Max, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { DatabaseVariables } from "./database.config";
+import { QueueVariables } from "./queue.config";
 import { transformAndValidateConfigWithKeys } from "../validation-utils";
 
 export enum Environment {
@@ -30,6 +31,7 @@ export function validate(plainConfig: Record<string, unknown>): Record<string, u
     return Object.assign(
         plainConfig,
         transformAndValidateConfigWithKeys(EnvironmentVariables, plainConfig, EnvironmentVariables.ENV_KEYS),
-        transformAndValidateConfigWithKeys(DatabaseVariables, plainConfig, DatabaseVariables.ENV_KEYS)
+        transformAndValidateConfigWithKeys(DatabaseVariables, plainConfig, DatabaseVariables.ENV_KEYS),
+        transformAndValidateConfigWithKeys(QueueVariables, plainConfig, QueueVariables.ENV_KEYS)
     );
 }
