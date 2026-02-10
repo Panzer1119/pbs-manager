@@ -6,6 +6,7 @@ import { Server } from "net";
 import { MyLogger } from "./app/my-logger";
 import { DocumentBuilder, OpenAPIObject, SwaggerModule } from "@nestjs/swagger";
 import { writeFileSync } from "fs";
+import { join } from "path";
 
 const LOGGER_PREFIX: string = process.env.LOGGER_PREFIX ?? "Satisfactory Logistics Manager";
 const logger: MyLogger = new MyLogger("main", { prefix: LOGGER_PREFIX, timestamp: true });
@@ -18,6 +19,9 @@ async function bootstrap(): Promise<Server> {
         logger,
     });
     const configService: ConfigService = app.get(ConfigService);
+
+    logger.verbose("Serving static files from /assets");
+    app.useStaticAssets(join(__dirname, "assets"), { prefix: "/assets/" });
 
     logger.verbose("Setting up global prefix");
     const globalPrefix: string = configService.get<string>("GLOBAL_PREFIX", "/api");
@@ -56,6 +60,7 @@ async function bootstrap(): Promise<Server> {
             },
             operationsSorter: (a, b) => a.get("id").localeCompare(b.get("id")),
         },
+        customCssUrl: "/assets/swagger/SwaggerDark.css",
     });
 
     logger.verbose("Start listening");
