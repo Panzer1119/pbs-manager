@@ -5,7 +5,7 @@ import { Namespace } from "@pbs-manager/database-schema";
 
 export interface RawNamespace {
     datastoreMountpoint: string;
-    parts: string[];
+    path: string;
 }
 
 export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespace> {
@@ -20,15 +20,14 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
     }
 
     rawKey(raw: RawNamespace): Key {
-        return makeKey(this.datastoreId, raw.parts.join("/"));
+        return makeKey(this.datastoreId, raw.path);
     }
 
     create(entityManager: EntityManager, raw: RawNamespace): Namespace {
-        const path: string = raw.parts.join("/");
         return entityManager.create(Namespace, {
             datastoreId: this.datastoreId,
-            name: raw.parts.at(-1),
-            path,
+            name: raw.path.at(-1),
+            path: raw.path,
             parent: undefined, // Should be null either way, because it is new
         });
     }
