@@ -164,3 +164,17 @@ export function basenamePosixPath(path: string, ext?: string | undefined): strin
 export function extnamePosixPath(path: string): string {
     return posix.extname(path);
 }
+
+export function timeSync<T>(fn: () => T): { result: T; time: number } {
+    const start: number = Date.now();
+    const result: T = fn();
+    const end: number = Date.now();
+    return { result, time: end - start };
+}
+
+export async function time<T>(fn: () => Promise<T>): Promise<{ result: T; time: number }> {
+    const start: number = Date.now();
+    const result: T = await fn();
+    const end: number = Date.now();
+    return { result, time: end - start };
+}
