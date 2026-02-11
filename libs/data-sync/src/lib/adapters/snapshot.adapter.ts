@@ -71,7 +71,7 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
 
     mark(entity: Snapshot, timestamp: Date): void {
         if (!entity.metadata) {
-            entity.metadata = { creation: timestamp, update: timestamp, deletion: undefined, version: 1 };
+            entity.metadata = { creation: timestamp, update: timestamp, deletion: null as unknown as Date, version: 1 };
         }
         if (entity.metadata.update?.getTime() !== timestamp.getTime()) {
             entity.metadata.update = timestamp;

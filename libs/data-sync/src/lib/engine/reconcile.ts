@@ -17,18 +17,14 @@ export async function reconcile<T, R>(
         if (entity) {
             // Update existing entity
             await adapter.update(entityManager, entity, raw);
-            //TODO But we need to ensure that at least the metadata update field is newer than our timestamp
-            // Mark the entity as processed
-            await adapter.mark(entity, timestamp);
         } else {
             // Create new entity
             entity = await adapter.create(entityManager, raw);
             // Add the entity to the map
             entityMap.set(rawKey, entity);
         }
-        //TODO Maybe we can skip the marking step, as the metadata update field should be newer than our timestamp anyway?
-        // // Mark the entity as processed
-        // await adapter.mark(entity, timestamp);
+        // Mark the entity as processed
+        await adapter.mark(entity, timestamp);
     }
     // Persist
     await entityManager.save(Array.from(entityMap.values()));
