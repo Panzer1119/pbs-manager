@@ -15,7 +15,8 @@
         "skipDefaultLibCheck": true,
         "baseUrl": ".",
         "paths": {
-            "@pbs-manager/database-schema": ["libs/database-schema/src/index.ts"]
+            "@pbs-manager/database-schema": ["libs/database-schema/src/index.ts"],
+            "@pbs-manager/data-sync": ["libs/data-sync/src/index.ts"]
         }
     },
     "exclude": ["node_modules", "tmp"]
