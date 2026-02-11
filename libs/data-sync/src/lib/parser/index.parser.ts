@@ -73,14 +73,22 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
             namespacePath = namespace.endsWith("/") ? namespace.slice(0, -1) : namespace;
             // Remove every odd part (should be "ns") to get the actual namespace parts
             const namespacePathParts: string[] = namespacePath.split("/").filter((_, index) => index % 2 === 1);
-            namespacePath = namespacePathParts.join("/");
-            if (
-                !parsedData.namespaces.some(
-                    ns => ns.datastoreMountpoint === datastoreMountpoint && ns.path === namespacePath
-                )
-            ) {
-                parsedData.namespaces.push({ datastoreMountpoint, path: namespacePath });
+            let currentNamespacePath: string = "";
+            for (const part of namespacePathParts) {
+                if (currentNamespacePath !== "") {
+                    currentNamespacePath += `/${part}`;
+                } else {
+                    currentNamespacePath = part;
+                }
+                if (
+                    !parsedData.namespaces.some(
+                        ns => ns.datastoreMountpoint === datastoreMountpoint && ns.path === currentNamespacePath
+                    )
+                ) {
+                    parsedData.namespaces.push({ datastoreMountpoint, path: currentNamespacePath });
+                }
             }
+            namespacePath = currentNamespacePath;
         }
         let rawGroup: RawGroup | undefined = parsedData.groups.find(
             g =>
