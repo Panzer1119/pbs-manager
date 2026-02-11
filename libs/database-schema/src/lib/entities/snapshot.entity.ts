@@ -2,6 +2,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGenerat
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Group } from "./group.entity";
 import { Archive } from "./archive.entity";
+import { Datastore } from "./datastore.entity";
 
 @Entity()
 @Index(["group", "time"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -9,6 +10,14 @@ import { Archive } from "./archive.entity";
 export class Snapshot {
     @PrimaryGeneratedColumn("identity")
     id!: number;
+
+    @Index()
+    @Column()
+    datastoreId!: number;
+
+    @ManyToOne(() => Datastore, datastore => datastore.snapshots, { onDelete: "CASCADE", onUpdate: "CASCADE" })
+    @JoinColumn({ referencedColumnName: "id" })
+    datastore?: Datastore;
 
     @Index()
     @Column()

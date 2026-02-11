@@ -3,6 +3,8 @@ import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Host } from "./host.entity";
 import { Namespace } from "./namespace.entity";
 import { Group } from "./group.entity";
+import { Snapshot } from "./snapshot.entity";
+import { Archive } from "./archive.entity";
 import { Chunk } from "./chunk.entity";
 
 @Entity()
@@ -35,6 +37,12 @@ export class Datastore {
 
     @OneToMany(() => Group, group => group.datastore)
     groups?: Group[];
+
+    @OneToMany(() => Snapshot, snapshot => snapshot.datastore)
+    snapshots?: Snapshot[];
+
+    @OneToMany(() => Archive, archive => archive.datastore)
+    archives?: Archive[];
 
     @OneToMany(() => Chunk, chunk => chunk.datastore)
     chunks?: Chunk[];

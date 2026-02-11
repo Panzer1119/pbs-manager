@@ -12,6 +12,7 @@ import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { ArchiveType } from "../types/archive.type";
 import { Snapshot } from "./snapshot.entity";
 import { ArchiveChunk } from "./archive-chunk.entity";
+import { Datastore } from "./datastore.entity";
 
 @Entity()
 @Index(["snapshot", "type", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
@@ -23,6 +24,14 @@ export class Archive {
 
     @Column({ type: "simple-enum", enum: ArchiveType, enumName: "archive_type" })
     type!: ArchiveType;
+
+    @Index()
+    @Column()
+    datastoreId!: number;
+
+    @ManyToOne(() => Datastore, datastore => datastore.archives, { onDelete: "CASCADE", onUpdate: "CASCADE" })
+    @JoinColumn({ referencedColumnName: "id" })
+    datastore?: Datastore;
 
     @Index()
     @Column()
