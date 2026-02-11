@@ -43,12 +43,12 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
             group.type,
             group.backupId
         );
-        const snapshotKey: Key = SnapshotAdapter.key(snapshot.datastoreId, groupKey, snapshot.time);
-        return makeKey(entity.datastoreId, snapshotKey, entity.type, entity.name);
+        const snapshotKey: Key = SnapshotAdapter.key(groupKey, snapshot.time);
+        return makeKey(snapshotKey, entity.type, entity.name);
     }
 
     rawKey(raw: RawArchive): Key {
-        return makeKey(this.datastoreId, raw.snapshotKey, raw.type, raw.name);
+        return makeKey(raw.snapshotKey, raw.type, raw.name);
     }
 
     create(entityManager: EntityManager, raw: RawArchive): Archive {

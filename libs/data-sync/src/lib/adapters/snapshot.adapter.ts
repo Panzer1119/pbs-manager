@@ -23,8 +23,8 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
         });
     }
 
-    public static key(datastoreId: number, groupKey: Key, timestamp: Date): Key {
-        return makeKey(datastoreId, groupKey, timestamp);
+    public static key(groupKey: Key, timestamp: Date): Key {
+        return makeKey(groupKey, timestamp);
     }
 
     entityKey(entity: Snapshot): Key {
@@ -38,11 +38,11 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
             group.type,
             group.backupId
         );
-        return SnapshotAdapter.key(entity.datastoreId, groupKey, entity.time);
+        return SnapshotAdapter.key(groupKey, entity.time);
     }
 
     rawKey(raw: RawSnapshot): Key {
-        return SnapshotAdapter.key(this.datastoreId, raw.groupKey, raw.timestamp);
+        return SnapshotAdapter.key(raw.groupKey, raw.timestamp);
     }
 
     create(entityManager: EntityManager, raw: RawSnapshot): Snapshot {
