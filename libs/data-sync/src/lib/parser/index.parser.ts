@@ -61,7 +61,7 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
         if (namespace) {
             namespacePath = namespace.endsWith("/") ? namespace.slice(0, -1) : namespace;
             // Remove every odd part (should be "ns") to get the actual namespace parts
-            const namespacePathParts: string[] = namespacePath.split("/").filter((_, index) => index % 2 === 0);
+            const namespacePathParts: string[] = namespacePath.split("/").filter((_, index) => index % 2 === 1);
             namespacePath = namespacePathParts.join("/");
             if (
                 !parsedData.namespaces.some(
