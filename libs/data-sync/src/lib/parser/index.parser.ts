@@ -7,6 +7,17 @@ import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
 export const REG_EXP_INDEX_FILE_PATH: RegExp =
     /^(?<datastoreMountpoint>.+?\/(?<datastoreName>[^/]+))\/(?:\.zfs\/snapshot\/(?<snapshot>[^/]+)+\/)?(?<namespace>(?:ns\/[^/]+\/)*)(?<type>vm|ct|host)\/(?<id>[^/]+)\/(?<timestamp>\d+-\d\d-\d\dT\d\d:\d\d:\d\dZ)\/(?<name>[^/]+)\.(?<extension>[^./]+)$/m;
 
+export function fileExtensionToArchiveType(fileExtension: string): ArchiveType {
+    switch (fileExtension) {
+        case "fidx":
+            return ArchiveType.Image;
+        case "didx":
+            return ArchiveType.File;
+        default:
+            throw new Error(`Unknown file extension: ${fileExtension}`);
+    }
+}
+
 export function parseIndexFilePaths(hostId: number, filePaths: string[]): ParsedData {
     // Sort the file paths
     filePaths.sort();
@@ -101,10 +112,13 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
             parsedData.snapshots.push(rawSnapshot);
         }
         const snapshotKey: Key = SnapshotAdapter.key(groupKey, timestampDate);
-        if (!parsedData.archives.some(a => a.snapshotKey === snapshotKey && a.type === type && a.name === name)) {
+        const archiveType: ArchiveType = fileExtensionToArchiveType(extension);
+        if (
+            !parsedData.archives.some(a => a.snapshotKey === snapshotKey && a.type === archiveType && a.name === name)
+        ) {
             parsedData.archives.push({
                 snapshotKey,
-                type: type as ArchiveType,
+                type: archiveType,
                 name,
             });
         }
