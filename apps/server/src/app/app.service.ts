@@ -184,6 +184,7 @@ export class AppService implements OnModuleInit {
                                 return null;
                             }
                             return entityManager.create(FileArchive, {
+                                datastoreId,
                                 snapshotId: snapshot.id,
                                 name: archiveMetadata.name,
                                 uuid: index.uuid,
@@ -212,6 +213,7 @@ export class AppService implements OnModuleInit {
                             return null;
                         }
                         return entityManager.create(ImageArchive, {
+                            datastoreId,
                             snapshotId: snapshot.id,
                             name: archiveMetadata.name,
                             uuid: index.uuid,
@@ -478,6 +480,7 @@ export class AppService implements OnModuleInit {
                         return null;
                     }
                     return entityManager.create(Snapshot, {
+                        datastoreId,
                         groupId: group.id,
                         group,
                         time: new Date(archiveData.time),
