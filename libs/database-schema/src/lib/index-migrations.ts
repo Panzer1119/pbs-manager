@@ -4,3 +4,4 @@ export * from "./migrations/1770561947959-AddSizeBytesAndChunkSizeBytesToArchive
 export * from "./migrations/1770563892448-CreateSSHConnectionAndSSHKeypair";
 export * from "./migrations/1770706939695-AddPasswordToSSHConnection";
 export * from "./migrations/1770707113080-AddPassphraseToSSHKeyPair";
+export * from "./migrations/1770843406812-AddPathToNamespace";

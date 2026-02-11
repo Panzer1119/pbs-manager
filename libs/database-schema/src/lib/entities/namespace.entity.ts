@@ -58,6 +58,10 @@ export class Namespace {
     @Column({ length: 255 })
     name!: string;
 
+    @Index()
+    @Column({ length: 4095, nullable: true })
+    path?: string;
+
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
