@@ -21,8 +21,8 @@ export function wireNamespaceParents(namespaces: Iterable<Namespace>): void {
         }
         const idx: number = namespace.path.lastIndexOf("/");
         if (idx === -1) {
-            //TODO Ensure that setting parent to undefined sets it null in the database and not just ignores the update
-            namespace.parent = undefined;
+            // Root namespace has no parent
+            namespace.parent = null as unknown as Namespace;
         } else {
             const parentPath: string = namespace.path.slice(0, idx);
             const parent: Namespace | undefined = map.get(parentPath);

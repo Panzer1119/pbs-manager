@@ -77,8 +77,7 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
             entity.metadata.update = timestamp;
         }
         if (entity.metadata.deletion != null) {
-            //TODO Ensure that setting deletion to undefined sets it null in the database and not just ignores the update
-            entity.metadata.deletion = undefined;
+            entity.metadata.deletion = null as unknown as Date;
         }
     }
 
