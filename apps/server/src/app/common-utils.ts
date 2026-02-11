@@ -172,7 +172,7 @@ export function timeSync<T>(fn: () => T): { result: T; time: number } {
     return { result, time: end - start };
 }
 
-export async function time<T>(fn: () => Promise<T>): Promise<{ result: T; time: number }> {
+export async function timeAsync<T>(fn: () => Promise<T>): Promise<{ result: T; time: number }> {
     const start: number = Date.now();
     const result: T = await fn();
     const end: number = Date.now();
