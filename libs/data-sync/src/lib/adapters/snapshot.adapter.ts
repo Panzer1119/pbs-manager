@@ -18,6 +18,7 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
     getTarget(): EntityTarget<ObjectLiteral> {
         return Snapshot;
     }
+
     getCompositeKeyProperties(): (keyof Snapshot)[] {
         return ["groupId", "time"];
     }

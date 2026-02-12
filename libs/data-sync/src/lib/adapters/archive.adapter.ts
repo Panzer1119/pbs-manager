@@ -23,6 +23,7 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
     getTarget(): EntityTarget<ObjectLiteral> {
         return Archive;
     }
+
     getCompositeKeyProperties(): (keyof Archive)[] {
         return ["snapshotId", "type", "name"];
     }

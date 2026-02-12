@@ -18,6 +18,7 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
     getTarget(): EntityTarget<ObjectLiteral> {
         return Datastore;
     }
+
     getCompositeKeyProperties(): (keyof Datastore)[] {
         return ["hostId", "name"];
     }

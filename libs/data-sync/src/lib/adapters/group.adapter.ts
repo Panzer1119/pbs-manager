@@ -19,6 +19,7 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
     getTarget(): EntityTarget<ObjectLiteral> {
         return Group;
     }
+
     getCompositeKeyProperties(): (keyof Group)[] {
         return ["datastoreId", "namespaceId", "type", "backupId"];
     }
