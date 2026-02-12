@@ -98,8 +98,9 @@ export async function runFullSync(
         if (!groupMap) {
             throw new Error(`Group map for datastore with id ${datastoreId} not found`);
         }
-        const datastoreSnapshots: RawSnapshot[] = parsedData.snapshots.filter(
-            snapshot => snapshot.groupKey.startsWith(`${datastore.mountpoint}::`) //FIXME This does not work
+        const groupKeys: Set<Key> = new Set(groupMap.keys());
+        const datastoreSnapshots: RawSnapshot[] = parsedData.snapshots.filter(snapshot =>
+            groupKeys.has(snapshot.groupKey)
         );
         const snapshotAdapter: SnapshotAdapter = new SnapshotAdapter(datastoreId, groupMap);
         const snapshotMap: Map<Key, Snapshot> = await reconcile<Snapshot, RawSnapshot>(
@@ -122,8 +123,9 @@ export async function runFullSync(
         if (!snapshotMap) {
             throw new Error(`Snapshot map for datastore with id ${datastoreId} not found`);
         }
-        const datastoreArchives: RawArchive[] = parsedData.archives.filter(
-            archive => archive.snapshotKey.startsWith(`${datastore.mountpoint}::`) //FIXME This does not work
+        const snapshotKeys: Set<Key> = new Set(snapshotMap.keys());
+        const datastoreArchives: RawArchive[] = parsedData.archives.filter(archive =>
+            snapshotKeys.has(archive.snapshotKey)
         );
         const archiveAdapter: ArchiveAdapter = new ArchiveAdapter(datastoreId, snapshotMap);
         await reconcile<unknown, RawArchive>(entityManager, datastoreArchives, timestamp, archiveAdapter);
