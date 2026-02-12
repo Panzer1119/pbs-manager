@@ -5,7 +5,7 @@ import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
 import { ArchiveAdapter, RawArchive } from "../adapters/archive.adapter";
 import { Key } from "../engine/adapter";
-import { Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
+import { Archive, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { reconcile } from "../engine/reconcile";
 import { wireNamespaceParents } from "./wire-namespace";
 import { Logger } from "@nestjs/common";
@@ -132,7 +132,7 @@ export async function runFullSync(
             ? parsedData.archives
             : parsedData.archives.filter(archive => snapshotKeys.has(archive.snapshotKey));
         const archiveAdapter: ArchiveAdapter = new ArchiveAdapter(datastoreId, snapshotMap);
-        await reconcile<unknown, RawArchive>(entityManager, datastoreArchives, timestamp, archiveAdapter);
+        await reconcile<Archive, RawArchive>(entityManager, datastoreArchives, timestamp, archiveAdapter);
     }
     logger.log(`Completed archive sync: ${parsedData.archives.length} archive(s) processed`);
     logger.log(`Full sync completed for host ID ${hostId}`);
