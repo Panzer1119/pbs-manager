@@ -63,10 +63,13 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         if (!snapshot) {
             throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
         }
+        if (!snapshot.id) {
+            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for Archive`);
+        }
         return {
             datastoreId: this.datastoreId,
             snapshotId: snapshot.id,
-            snapshot,
+            // snapshot,
             type: raw.type,
             name: raw.name,
             uuid: raw.uuid,
@@ -80,13 +83,16 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         if (!snapshot) {
             throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
         }
+        if (!snapshot.id) {
+            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for Archive`);
+        }
         if (
             (entity.snapshotId ?? null) !== (snapshot?.id ?? null) ||
             entity.snapshot?.id !== snapshot?.id ||
             entity.snapshot?.time !== snapshot?.time
         ) {
-            entity.snapshotId = snapshot?.id as number;
-            entity.snapshot = snapshot as Snapshot;
+            entity.snapshotId = (snapshot?.id ?? null) as number;
+            // entity.snapshot = snapshot as Snapshot;
         }
 
         if (entity.type !== raw.type) {

@@ -57,10 +57,13 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
         if (!group) {
             throw new Error(`Group with key ${raw.groupKey} not found for snapshot`);
         }
+        if (!group.id) {
+            throw new Error(`Group with key ${raw.groupKey} has no id for snapshot`);
+        }
         return {
             datastoreId: this.datastoreId,
-            groupId: group.id,
-            group,
+            groupId: group.id ?? (null as unknown as number),
+            // group,
             time: raw.timestamp,
         };
     }
@@ -68,14 +71,20 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
     update(entity: Snapshot, raw: RawSnapshot): Snapshot | QueryDeepPartialEntity<Snapshot> {
         const groupKey: Key | null = raw.groupKey ? makeKey(this.datastoreId, raw.groupKey) : null;
         const group: Group | null = groupKey ? (this.groupMap.get(groupKey) ?? null) : null;
+        if (!group) {
+            throw new Error(`Group with key ${raw.groupKey} not found for snapshot`);
+        }
+        if (!group.id) {
+            throw new Error(`Group with key ${raw.groupKey} has no id for snapshot`);
+        }
         if (
             (entity.groupId ?? null) !== (group?.id ?? null) ||
             entity.group?.id !== group?.id ||
             entity.group?.type !== group?.type ||
             entity.group?.backupId !== group?.backupId
         ) {
-            entity.groupId = group?.id as number;
-            entity.group = group as Group;
+            entity.groupId = (group?.id ?? null) as number;
+            // entity.group = group as Group;
         }
         return entity;
     }

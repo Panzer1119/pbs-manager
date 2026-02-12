@@ -54,10 +54,13 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
     create(raw: RawGroup): QueryDeepPartialEntity<Group> {
         const namespaceKey: Key | null = raw.namespacePath ? makeKey(this.datastoreId, raw.namespacePath) : null;
         const namespace: Namespace | null = namespaceKey ? (this.namespaceMap.get(namespaceKey) ?? null) : null;
+        if (namespace && !namespace.id) {
+            throw new Error(`Namespace with key ${namespaceKey} has no id`);
+        }
         return {
             datastoreId: this.datastoreId,
             namespaceId: namespace?.id ?? (null as unknown as number),
-            namespace: namespace as unknown as Namespace,
+            // namespace: namespace as unknown as Namespace,
             type: raw.backupType,
             backupId: raw.backupId,
         };
@@ -66,13 +69,16 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
     update(entity: Group, raw: RawGroup): Group | QueryDeepPartialEntity<Group> {
         const namespaceKey: Key | null = raw.namespacePath ? makeKey(this.datastoreId, raw.namespacePath) : null;
         const namespace: Namespace | null = namespaceKey ? (this.namespaceMap.get(namespaceKey) ?? null) : null;
+        if (namespace && !namespace.id) {
+            throw new Error(`Namespace with key ${namespaceKey} has no id`);
+        }
         if (
             (entity.namespaceId ?? null) !== (namespace?.id ?? null) ||
             entity.namespace?.id !== namespace?.id ||
             entity.namespace?.path !== namespace?.path
         ) {
-            entity.namespaceId = namespace?.id;
-            entity.namespace = namespace as Namespace;
+            entity.namespaceId = namespace?.id ?? (null as unknown as number);
+            // entity.namespace = namespace as Namespace;
         }
 
         if (entity.type !== raw.backupType) {
