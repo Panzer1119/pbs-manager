@@ -104,23 +104,23 @@ export class ImageArchiveAdapter implements ReconcileAdapter<ImageArchive, RawIm
             entity.name = raw.name;
         }
         let hasChanges: boolean = false;
-        if (entity.uuid !== raw.uuid) {
+        if (entity.uuid !== raw.uuid && raw.uuid !== undefined) {
             entity.uuid = raw.uuid;
             hasChanges = true;
         }
-        if (entity.creation?.getTime() !== raw.creation?.getTime()) {
+        if (entity.creation?.getTime() !== raw.creation?.getTime() && raw.creation !== undefined) {
             entity.creation = raw.creation;
             hasChanges = true;
         }
-        if (entity.indexHashSHA256 !== raw.indexHashSHA256) {
+        if (entity.indexHashSHA256 !== raw.indexHashSHA256 && raw.indexHashSHA256 !== undefined) {
             entity.indexHashSHA256 = raw.indexHashSHA256;
             hasChanges = true;
         }
-        if (entity.sizeBytes !== raw.sizeBytes) {
+        if (entity.sizeBytes !== raw.sizeBytes && raw.sizeBytes !== undefined) {
             entity.sizeBytes = raw.sizeBytes || -1;
             hasChanges = true;
         }
-        if (entity.chunkSizeBytes !== raw.chunkSizeBytes) {
+        if (entity.chunkSizeBytes !== raw.chunkSizeBytes && raw.chunkSizeBytes !== undefined) {
             entity.chunkSizeBytes = raw.chunkSizeBytes || -1;
             hasChanges = true;
         }

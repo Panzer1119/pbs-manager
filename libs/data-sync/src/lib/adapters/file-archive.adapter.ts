@@ -103,15 +103,15 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
         }
 
         let hasChanges: boolean = false;
-        if (entity.uuid !== raw.uuid) {
+        if (entity.uuid !== raw.uuid && raw.uuid !== undefined) {
             entity.uuid = raw.uuid;
             hasChanges = true;
         }
-        if (entity.creation?.getTime() !== raw.creation?.getTime()) {
+        if (entity.creation?.getTime() !== raw.creation?.getTime() && raw.creation !== undefined) {
             entity.creation = raw.creation;
             hasChanges = true;
         }
-        if (entity.indexHashSHA256 !== raw.indexHashSHA256) {
+        if (entity.indexHashSHA256 !== raw.indexHashSHA256 && raw.indexHashSHA256 !== undefined) {
             entity.indexHashSHA256 = raw.indexHashSHA256;
             hasChanges = true;
         }
