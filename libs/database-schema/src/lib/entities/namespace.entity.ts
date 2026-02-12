@@ -17,21 +17,8 @@ import { Group } from "./group.entity";
 @Entity()
 @Tree("closure-table")
 // Parent, Name
-// Metadata Deletion IS NULL
-@Index(["datastore", "name"], { unique: true, where: '"parent_id" IS NULL AND "metadata_deletion" IS NULL' })
-@Index(["datastore", "parent", "name"], {
-    unique: true,
-    where: '"parent_id" IS NOT NULL AND "metadata_deletion" IS NULL',
-})
-// Metadata Deletion IS NOT NULL
-@Index(["datastore", "name", "metadata.deletion"], {
-    unique: true,
-    where: '"parent_id" IS NULL AND "metadata_deletion" IS NOT NULL',
-})
-@Index(["datastore", "parent", "name", "metadata.deletion"], {
-    unique: true,
-    where: '"parent_id" IS NOT NULL AND "metadata_deletion" IS NOT NULL',
-})
+//TODO Nulls-not-distinct manually created with migration
+@Index(["datastore", "parent", "name"], { unique: true })
 export class Namespace {
     @PrimaryGeneratedColumn("identity")
     id!: number;

@@ -7,3 +7,4 @@ export * from "./migrations/1770707113080-AddPassphraseToSSHKeyPair";
 export * from "./migrations/1770843406812-AddPathToNamespace";
 export * from "./migrations/1770844617181-AddDatastoreToGroupAndArchive";
 export * from "./migrations/1770864070055-ConvertSomePartialIndexesToFullIndexes";
+export * from "./migrations/1770864287739-ConvertSomePartialIndexesToFullNullNotDistinctIndexes";

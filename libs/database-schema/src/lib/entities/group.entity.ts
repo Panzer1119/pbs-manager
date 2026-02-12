@@ -7,24 +7,8 @@ import { Snapshot } from "./snapshot.entity";
 
 @Entity()
 // Namespace, Type, Backup ID
-// Metadata Deletion IS NULL
-@Index(["datastore", "type", "backupId"], {
-    unique: true,
-    where: '"namespace_id" IS NULL AND "metadata_deletion" IS NULL',
-})
-@Index(["datastore", "namespace", "type", "backupId"], {
-    unique: true,
-    where: '"namespace_id" IS NOT NULL AND "metadata_deletion" IS NULL',
-})
-// Metadata Deletion IS NOT NULL
-@Index(["datastore", "type", "backupId", "metadata.deletion"], {
-    unique: true,
-    where: '"namespace_id" IS NULL AND "metadata_deletion" IS NOT NULL',
-})
-@Index(["datastore", "namespace", "type", "backupId", "metadata.deletion"], {
-    unique: true,
-    where: '"namespace_id" IS NOT NULL AND "metadata_deletion" IS NOT NULL',
-})
+//TODO Nulls-not-distinct manually created with migration
+@Index(["datastore", "namespace", "type", "backupId"], { unique: true })
 export class Group {
     @PrimaryGeneratedColumn("identity")
     id!: number;
