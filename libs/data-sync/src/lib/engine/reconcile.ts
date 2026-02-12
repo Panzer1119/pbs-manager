@@ -1,12 +1,21 @@
 import { EntityManager } from "typeorm";
 import { Key, ReconcileAdapter } from "./adapter";
 
+export interface ReconcileOptions {
+    filterExisting?: boolean;
+    filterRelevant?: boolean;
+}
+
 export async function reconcile<T, R>(
     entityManager: EntityManager,
     raws: Iterable<R>,
     timestamp: Date,
-    adapter: ReconcileAdapter<T, R>
+    adapter: ReconcileAdapter<T, R>,
+    options?: ReconcileOptions
 ): Promise<Map<Key, T>> {
+    options ??= {};
+    const filterExisting: boolean = options.filterExisting ?? false;
+    const filterRelevant: boolean = options.filterRelevant ?? false;
     // Load existing entities
     const entities: T[] = await adapter.load(entityManager);
     const entityMap: Map<Key, T> = new Map(entities.map(entity => [adapter.entityKey(entity), entity]));
@@ -30,5 +39,18 @@ export async function reconcile<T, R>(
     await entityManager.save(Array.from(entityMap.values()));
     // Sweep
     await adapter.sweep(entityManager, timestamp);
-    return entityMap;
+    let filteredEntityMap: Map<Key, T> = entityMap;
+    if (filterExisting) {
+        if (!adapter.filterExisting) {
+            throw new Error("Adapter must implement filterExisting to return only non-deleted entities");
+        }
+        filteredEntityMap = await adapter.filterExisting(entityManager, filteredEntityMap);
+    }
+    if (filterRelevant) {
+        if (!adapter.filterRelevant) {
+            throw new Error("Adapter must implement filterRelevant to return only relevant entities");
+        }
+        filteredEntityMap = await adapter.filterRelevant(entityManager, filteredEntityMap);
+    }
+    return filteredEntityMap;
 }

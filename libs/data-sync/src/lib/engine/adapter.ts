@@ -10,4 +10,6 @@ export interface ReconcileAdapter<T, R> {
     update(entityManager: EntityManager, entity: T, raw: R): Promise<void> | void;
     mark(entity: T, timestamp: Date): Promise<void> | void;
     sweep(entityManager: EntityManager, timestamp: Date): Promise<void> | void;
+    filterExisting?(entityManager: EntityManager, entityMap: Map<Key, T>): Promise<Map<Key, T>> | Map<Key, T>;
+    filterRelevant?(entityManager: EntityManager, entityMap: Map<Key, T>): Promise<Map<Key, T>> | Map<Key, T>;
 }
