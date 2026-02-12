@@ -1,49 +1,48 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
 import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
-import { Archive, ArchiveType, Group, Snapshot } from "@pbs-manager/database-schema";
+import { ArchiveType, FileArchive, Group, Snapshot } from "@pbs-manager/database-schema";
 import { SnapshotAdapter } from "./snapshot.adapter";
 import { GroupAdapter } from "./group.adapter";
 
-export interface RawArchive {
+export interface RawFileArchive {
     snapshotKey: string;
-    type: ArchiveType;
     name: string;
     uuid?: string;
     creation?: Date;
     indexHashSHA256?: string;
 }
 
-export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
+export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFileArchive> {
     constructor(
         private readonly datastoreId: number,
         private readonly snapshotMap: Map<Key, Snapshot>
     ) {}
 
     getTarget(): EntityTarget<ObjectLiteral> {
-        return Archive;
+        return FileArchive;
     }
 
-    getCompositeKeyProperties(): (keyof Archive)[] {
+    getCompositeKeyProperties(): (keyof FileArchive)[] {
         return ["snapshotId", "type", "name"];
     }
 
-    async load(entityManager: EntityManager): Promise<Archive[]> {
-        return entityManager.find(Archive, {
+    async load(entityManager: EntityManager): Promise<FileArchive[]> {
+        return entityManager.find(FileArchive, {
             where: { datastoreId: this.datastoreId },
             relations: { snapshot: { group: { datastore: true, namespace: true } } },
             withDeleted: true,
         });
     }
 
-    entityKey(entity: Archive): Key {
+    entityKey(entity: FileArchive): Key {
         const snapshot: Snapshot | undefined = entity.snapshot;
         if (!snapshot) {
-            throw new Error(`Archive with id ${entity.id} has no snapshot`);
+            throw new Error(`FileArchive with id ${entity.id} has no snapshot`);
         }
         const group: Group | undefined = snapshot.group;
         if (!group) {
-            throw new Error(`Snapshot with id ${snapshot.id} has no group for Archive with id ${entity.id}`);
+            throw new Error(`Snapshot with id ${snapshot.id} has no group for FileArchive with id ${entity.id}`);
         }
         const groupKey: Key = GroupAdapter.key(
             group.datastore?.mountpoint,
@@ -55,23 +54,23 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         return makeKey(snapshotKey, entity.type, entity.name);
     }
 
-    rawKey(raw: RawArchive): Key {
-        return makeKey(raw.snapshotKey, raw.type, raw.name);
+    rawKey(raw: RawFileArchive): Key {
+        return makeKey(raw.snapshotKey, ArchiveType.File, raw.name);
     }
 
-    create(raw: RawArchive): QueryDeepPartialEntity<Archive> {
+    create(raw: RawFileArchive): QueryDeepPartialEntity<FileArchive> {
         const snapshot: Snapshot | null = this.snapshotMap.get(raw.snapshotKey) ?? null;
         if (!snapshot) {
-            throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
+            throw new Error(`Snapshot with key ${raw.snapshotKey} not found for FileArchive`);
         }
         if (!snapshot.id) {
-            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for Archive`);
+            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for FileArchive`);
         }
         return {
             datastoreId: this.datastoreId,
             snapshotId: snapshot.id,
             // snapshot,
-            type: raw.type,
+            // type: raw.type,
             name: raw.name,
             uuid: raw.uuid,
             creation: raw.creation,
@@ -79,13 +78,13 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         };
     }
 
-    update(entity: Archive, raw: RawArchive): Archive | QueryDeepPartialEntity<Archive> {
+    update(entity: FileArchive, raw: RawFileArchive): FileArchive | QueryDeepPartialEntity<FileArchive> {
         const snapshot: Snapshot | null = raw.snapshotKey ? (this.snapshotMap.get(raw.snapshotKey) ?? null) : null;
         if (!snapshot) {
-            throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
+            throw new Error(`Snapshot with key ${raw.snapshotKey} not found for FileArchive`);
         }
         if (!snapshot.id) {
-            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for Archive`);
+            throw new Error(`Snapshot with key ${raw.snapshotKey} has no id for FileArchive`);
         }
         if (
             (entity.snapshotId ?? null) !== (snapshot?.id ?? null) ||
@@ -96,9 +95,9 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
             // entity.snapshot = snapshot as Snapshot;
         }
 
-        if (entity.type !== raw.type) {
-            entity.type = raw.type;
-        }
+        // if (entity.type !== raw.type) {
+        //     entity.type = raw.type;
+        // }
         if (entity.name !== raw.name) {
             entity.name = raw.name;
         }
@@ -114,7 +113,7 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         return entity;
     }
 
-    mark(entity: Archive, timestamp: Date): void {
+    mark(entity: FileArchive, timestamp: Date): void {
         if (!entity.metadata) {
             entity.metadata = { creation: timestamp, update: timestamp, deletion: null as unknown as Date, version: 1 };
         }
@@ -126,14 +125,14 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         }
     }
 
-    updateId(entity: Archive, id: ObjectLiteral): void {
+    updateId(entity: FileArchive, id: ObjectLiteral): void {
         entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {
         await entityManager
             .createQueryBuilder()
-            .update(Archive)
+            .update(FileArchive)
             .set({ metadata: { deletion: timestamp } })
             .where("datastoreId = :datastoreId", { datastoreId: this.datastoreId })
             .andWhere("metadata_update < :timestamp", { timestamp })

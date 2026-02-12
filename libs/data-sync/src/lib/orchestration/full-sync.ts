@@ -3,9 +3,10 @@ import { DatastoreAdapter, RawDatastore } from "../adapters/datastore.adapter";
 import { NamespaceAdapter, RawNamespace } from "../adapters/namespace.adapter";
 import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
-import { ArchiveAdapter, RawArchive } from "../adapters/archive.adapter";
+import { FileArchiveAdapter, RawFileArchive } from "../adapters/file-archive.adapter";
+import { ImageArchiveAdapter, RawImageArchive } from "../adapters/image-archive.adapter";
 import { Key } from "../engine/adapter";
-import { Archive, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
+import { Datastore, FileArchive, Group, ImageArchive, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { reconcile } from "../engine/reconcile";
 import { wireNamespaceParents } from "./wire-namespace";
 import { Logger } from "@nestjs/common";
@@ -15,7 +16,8 @@ export interface ParsedData {
     namespaces: RawNamespace[];
     groups: RawGroup[];
     snapshots: RawSnapshot[];
-    archives: RawArchive[];
+    fileArchives: RawFileArchive[];
+    imageArchives: RawImageArchive[];
 }
 
 export async function runFullSync(
@@ -119,8 +121,8 @@ export async function runFullSync(
         `Completed snapshot sync: ${Array.from(snapshotMaps.values()).reduce((acc, map) => acc + map.size, 0)} snapshot(s) processed`
     );
 
-    // Archives
-    logger.debug(`Syncing ${parsedData.archives.length} archive(s) for ${datastoreMap.size} datastore(s)`);
+    // File Archives
+    logger.debug(`Syncing ${parsedData.fileArchives.length} file archive(s) for ${datastoreMap.size} datastore(s)`);
     for (const datastore of datastoreMap.values()) {
         const datastoreId: number = datastore.id;
         const snapshotMap: Map<Key, Snapshot> | undefined = snapshotMaps.get(datastoreId);
@@ -128,12 +130,40 @@ export async function runFullSync(
             throw new Error(`Snapshot map for datastore with id ${datastoreId} not found`);
         }
         const snapshotKeys: Set<Key> = new Set(snapshotMap.keys());
-        const datastoreArchives: RawArchive[] = singleDatastore
-            ? parsedData.archives
-            : parsedData.archives.filter(archive => snapshotKeys.has(archive.snapshotKey));
-        const archiveAdapter: ArchiveAdapter = new ArchiveAdapter(datastoreId, snapshotMap);
-        await reconcile<Archive, RawArchive>(entityManager, datastoreArchives, timestamp, archiveAdapter);
+        const datastoreFileArchives: RawFileArchive[] = singleDatastore
+            ? parsedData.fileArchives
+            : parsedData.fileArchives.filter(archive => snapshotKeys.has(archive.snapshotKey));
+        const fileArchiveAdapter: FileArchiveAdapter = new FileArchiveAdapter(datastoreId, snapshotMap);
+        await reconcile<FileArchive, RawFileArchive>(
+            entityManager,
+            datastoreFileArchives,
+            timestamp,
+            fileArchiveAdapter
+        );
     }
-    logger.log(`Completed archive sync: ${parsedData.archives.length} archive(s) processed`);
+    logger.log(`Completed file archive sync: ${parsedData.fileArchives.length} archive(s) processed`);
+    logger.log(`Full sync completed for host ID ${hostId}`);
+
+    // Image Archives
+    logger.debug(`Syncing ${parsedData.imageArchives.length} image archive(s) for ${datastoreMap.size} datastore(s)`);
+    for (const datastore of datastoreMap.values()) {
+        const datastoreId: number = datastore.id;
+        const snapshotMap: Map<Key, Snapshot> | undefined = snapshotMaps.get(datastoreId);
+        if (!snapshotMap) {
+            throw new Error(`Snapshot map for datastore with id ${datastoreId} not found`);
+        }
+        const snapshotKeys: Set<Key> = new Set(snapshotMap.keys());
+        const datastoreImageArchives: RawImageArchive[] = singleDatastore
+            ? parsedData.imageArchives
+            : parsedData.imageArchives.filter(archive => snapshotKeys.has(archive.snapshotKey));
+        const imageArchiveAdapter: ImageArchiveAdapter = new ImageArchiveAdapter(datastoreId, snapshotMap);
+        await reconcile<ImageArchive, RawImageArchive>(
+            entityManager,
+            datastoreImageArchives,
+            timestamp,
+            imageArchiveAdapter
+        );
+    }
+    logger.log(`Completed image archive sync: ${parsedData.imageArchives.length} archive(s) processed`);
     logger.log(`Full sync completed for host ID ${hostId}`);
 }

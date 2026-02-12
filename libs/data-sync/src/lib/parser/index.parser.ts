@@ -26,7 +26,8 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
         namespaces: [],
         groups: [],
         snapshots: [],
-        archives: [],
+        fileArchives: [],
+        imageArchives: [],
     };
     for (const filePath of filePaths) {
         const match: RegExpExecArray | null = REG_EXP_INDEX_FILE_PATH.exec(filePath);
@@ -121,14 +122,19 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
         }
         const snapshotKey: Key = SnapshotAdapter.key(groupKey, timestampDate);
         const archiveType: ArchiveType = fileExtensionToArchiveType(extension);
-        if (
-            !parsedData.archives.some(a => a.snapshotKey === snapshotKey && a.type === archiveType && a.name === name)
-        ) {
-            parsedData.archives.push({
-                snapshotKey,
-                type: archiveType,
-                name,
-            });
+        switch (archiveType) {
+            case ArchiveType.File:
+                if (!parsedData.fileArchives.some(a => a.snapshotKey === snapshotKey && a.name === name)) {
+                    parsedData.fileArchives.push({ snapshotKey, name });
+                }
+                break;
+            case ArchiveType.Image:
+                if (!parsedData.imageArchives.some(a => a.snapshotKey === snapshotKey && a.name === name)) {
+                    parsedData.imageArchives.push({ snapshotKey, name });
+                }
+                break;
+            default:
+                throw new Error(`Unknown archive type: ${archiveType}`);
         }
     }
     return parsedData;
