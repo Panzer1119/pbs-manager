@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager } from "typeorm";
+import { EntityManager, UpdateQueryBuilder } from "typeorm";
 import { makeKey } from "../engine/key";
 import { Datastore } from "@pbs-manager/database-schema";
 
@@ -10,7 +10,10 @@ export interface RawDatastore {
 }
 
 export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastore> {
-    constructor(private readonly hostId: number) {}
+    constructor(
+        private readonly hostId: number,
+        private readonly datastoreMountpoints: string[] | null = null
+    ) {}
 
     async load(entityManager: EntityManager): Promise<Datastore[]> {
         return entityManager.find(Datastore, { where: { hostId: this.hostId }, withDeleted: true });
@@ -54,13 +57,16 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {
-        await entityManager
+        let qb: UpdateQueryBuilder<Datastore> = entityManager
             .createQueryBuilder()
             .update(Datastore)
             .set({ metadata: { deletion: timestamp } })
             .where("hostId = :hostId", { hostId: this.hostId })
             .andWhere("metadata_update < :timestamp", { timestamp })
-            .andWhere("metadata_deletion IS NULL")
-            .execute();
+            .andWhere("metadata_deletion IS NULL");
+        if (this.datastoreMountpoints != null) {
+            qb = qb.andWhere("mountpoint IN (:...mountpoints)", { mountpoints: this.datastoreMountpoints });
+        }
+        await qb.execute();
     }
 }

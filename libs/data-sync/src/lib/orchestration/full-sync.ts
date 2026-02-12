@@ -20,7 +20,10 @@ export interface ParsedData {
 export async function runFullSync(entityManager: EntityManager, parsedData: ParsedData, hostId: number): Promise<void> {
     const timestamp: Date = new Date();
     // Datastores
-    const datastoreAdapter: DatastoreAdapter = new DatastoreAdapter(hostId);
+    const datastoreAdapter: DatastoreAdapter = new DatastoreAdapter(
+        hostId,
+        parsedData.datastores.map(ds => ds.mountpoint)
+    );
     const datastoreMap: Map<Key, Datastore> = await reconcile<Datastore, RawDatastore>(
         entityManager,
         parsedData.datastores,
