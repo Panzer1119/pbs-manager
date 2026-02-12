@@ -5,8 +5,7 @@ import { Archive } from "./archive.entity";
 import { Datastore } from "./datastore.entity";
 
 @Entity()
-@Index(["group", "time"], { unique: true, where: '"metadata_deletion" IS NULL' })
-@Index(["group", "time", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+@Index(["group", "time"], { unique: true })
 export class Snapshot {
     @PrimaryGeneratedColumn("identity")
     id!: number;

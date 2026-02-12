@@ -15,8 +15,7 @@ import { ArchiveChunk } from "./archive-chunk.entity";
 import { Datastore } from "./datastore.entity";
 
 @Entity()
-@Index(["snapshot", "type", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
-@Index(["snapshot", "type", "name", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+@Index(["snapshot", "type", "name"], { unique: true })
 @TableInheritance({ column: { type: "simple-enum", enum: ArchiveType, enumName: "archive_type" } })
 export class Archive {
     @PrimaryGeneratedColumn("identity")

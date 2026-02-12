@@ -8,8 +8,7 @@ import { Archive } from "./archive.entity";
 import { Chunk } from "./chunk.entity";
 
 @Entity()
-@Index(["host", "name"], { unique: true, where: '"metadata_deletion" IS NULL' })
-@Index(["host", "name", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+@Index(["host", "name"], { unique: true })
 export class Datastore {
     @PrimaryGeneratedColumn("identity")
     id!: number;

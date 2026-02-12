@@ -5,8 +5,7 @@ import { BigIntTransformer } from "../transformers/bigint.transformer";
 import { ArchiveChunk } from "./archive-chunk.entity";
 
 @Entity()
-@Index(["datastore", "hashSHA256"], { unique: true, where: '"metadata_deletion" IS NULL' })
-@Index(["datastore", "hashSHA256", "metadata.deletion"], { unique: true, where: '"metadata_deletion" IS NOT NULL' })
+@Index(["datastore", "hashSHA256"], { unique: true })
 export class Chunk {
     @PrimaryGeneratedColumn("identity")
     id!: number;
