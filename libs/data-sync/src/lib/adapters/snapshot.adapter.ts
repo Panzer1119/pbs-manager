@@ -69,8 +69,7 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
     }
 
     update(entity: Snapshot, raw: RawSnapshot): Snapshot | QueryDeepPartialEntity<Snapshot> {
-        const groupKey: Key | null = raw.groupKey ? makeKey(this.datastoreId, raw.groupKey) : null;
-        const group: Group | null = groupKey ? (this.groupMap.get(groupKey) ?? null) : null;
+        const group: Group | null = raw.groupKey ? (this.groupMap.get(raw.groupKey) ?? null) : null;
         if (!group) {
             throw new Error(`Group with key ${raw.groupKey} not found for snapshot`);
         }
