@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager } from "typeorm";
+import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
 import { BackupType, Group, Namespace } from "@pbs-manager/database-schema";
 
@@ -15,6 +15,13 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
         private readonly datastoreId: number,
         private readonly namespaceMap: Map<Key, Namespace>
     ) {}
+
+    getTarget(): EntityTarget<ObjectLiteral> {
+        return Group;
+    }
+    getCompositeKeyProperties(): (keyof Group)[] {
+        return ["datastoreId", "namespaceId", "type", "backupId"];
+    }
 
     async load(entityManager: EntityManager): Promise<Group[]> {
         return entityManager.find(Group, {
@@ -44,21 +51,28 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
         return GroupAdapter.key(raw.datastoreMountpoint, raw.namespacePath, raw.backupType, raw.backupId);
     }
 
-    create(entityManager: EntityManager, raw: RawGroup): Group {
+    create(raw: RawGroup): QueryDeepPartialEntity<Group> {
         const namespaceKey: Key | null = raw.namespacePath ? makeKey(this.datastoreId, raw.namespacePath) : null;
-        return entityManager.create(Group, {
+        const namespace: Namespace | null = namespaceKey ? (this.namespaceMap.get(namespaceKey) ?? null) : null;
+        return {
             datastoreId: this.datastoreId,
-            namespace: namespaceKey ? this.namespaceMap.get(namespaceKey) : undefined, // Should be null either way, because it is new
+            namespaceId: namespace?.id ?? (null as unknown as number),
+            namespace: namespace as unknown as Namespace,
             type: raw.backupType,
             backupId: raw.backupId,
-        });
+        };
     }
 
-    update(entityManager: EntityManager, entity: Group, raw: RawGroup): void {
+    update(entity: Group, raw: RawGroup): Group | QueryDeepPartialEntity<Group> {
         const namespaceKey: Key | null = raw.namespacePath ? makeKey(this.datastoreId, raw.namespacePath) : null;
-        const namespace: Namespace | undefined = namespaceKey ? this.namespaceMap.get(namespaceKey) : undefined;
-        if (entity.namespace?.id !== namespace?.id || entity.namespace?.path !== namespace?.path) {
-            entity.namespace = namespace;
+        const namespace: Namespace | null = namespaceKey ? (this.namespaceMap.get(namespaceKey) ?? null) : null;
+        if (
+            (entity.namespaceId ?? null) !== (namespace?.id ?? null) ||
+            entity.namespace?.id !== namespace?.id ||
+            entity.namespace?.path !== namespace?.path
+        ) {
+            entity.namespaceId = namespace?.id;
+            entity.namespace = namespace as Namespace;
         }
 
         if (entity.type !== raw.backupType) {
@@ -67,6 +81,7 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
         if (entity.backupId !== raw.backupId) {
             entity.backupId = raw.backupId;
         }
+        return entity;
     }
 
     mark(entity: Group, timestamp: Date): void {
@@ -79,6 +94,10 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
         }
+    }
+
+    updateId(entity: Group, id: ObjectLiteral): void {
+        entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {

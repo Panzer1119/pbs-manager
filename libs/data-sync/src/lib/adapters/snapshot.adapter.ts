@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager } from "typeorm";
+import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
 import { Group, Snapshot } from "@pbs-manager/database-schema";
 import { GroupAdapter } from "./group.adapter";
@@ -14,6 +14,13 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
         private readonly datastoreId: number,
         private readonly groupMap: Map<Key, Group>
     ) {}
+
+    getTarget(): EntityTarget<ObjectLiteral> {
+        return Snapshot;
+    }
+    getCompositeKeyProperties(): (keyof Snapshot)[] {
+        return ["groupId", "time"];
+    }
 
     async load(entityManager: EntityManager): Promise<Snapshot[]> {
         return entityManager.find(Snapshot, {
@@ -45,28 +52,32 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
         return SnapshotAdapter.key(raw.groupKey, raw.timestamp);
     }
 
-    create(entityManager: EntityManager, raw: RawSnapshot): Snapshot {
-        const group: Group | undefined = this.groupMap.get(raw.groupKey);
+    create(raw: RawSnapshot): QueryDeepPartialEntity<Snapshot> {
+        const group: Group | null = this.groupMap.get(raw.groupKey) ?? null;
         if (!group) {
             throw new Error(`Group with key ${raw.groupKey} not found for snapshot`);
         }
-        return entityManager.create(Snapshot, {
+        return {
             datastoreId: this.datastoreId,
+            groupId: group.id,
             group,
             time: raw.timestamp,
-        });
+        };
     }
 
-    update(entityManager: EntityManager, entity: Snapshot, raw: RawSnapshot): void {
+    update(entity: Snapshot, raw: RawSnapshot): Snapshot | QueryDeepPartialEntity<Snapshot> {
         const groupKey: Key | null = raw.groupKey ? makeKey(this.datastoreId, raw.groupKey) : null;
-        const group: Group | undefined = groupKey ? this.groupMap.get(groupKey) : undefined;
+        const group: Group | null = groupKey ? (this.groupMap.get(groupKey) ?? null) : null;
         if (
+            (entity.groupId ?? null) !== (group?.id ?? null) ||
             entity.group?.id !== group?.id ||
             entity.group?.type !== group?.type ||
             entity.group?.backupId !== group?.backupId
         ) {
-            entity.group = group;
+            entity.groupId = group?.id as number;
+            entity.group = group as Group;
         }
+        return entity;
     }
 
     mark(entity: Snapshot, timestamp: Date): void {
@@ -79,6 +90,10 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
         }
+    }
+
+    updateId(entity: Snapshot, id: ObjectLiteral): void {
+        entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {

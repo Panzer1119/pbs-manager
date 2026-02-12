@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager } from "typeorm";
+import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
 import { Namespace } from "@pbs-manager/database-schema";
 
@@ -10,6 +10,19 @@ export interface RawNamespace {
 
 export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespace> {
     constructor(private readonly datastoreId: number) {}
+
+    getTarget(): EntityTarget<ObjectLiteral> {
+        return Namespace;
+    }
+
+    getCompositeKeyProperties(): (keyof Namespace)[] {
+        return ["datastoreId", "parentId", "name"];
+    }
+
+    // Not necessary as the parents are wired later on manually anyway
+    // getSelfReferenceKeyProperties?(): { objectKey: keyof Namespace; objectIdKey: keyof Namespace }[] {
+    //     return [{ objectKey: "parent", objectIdKey: "parentId" }];
+    // }
 
     async load(entityManager: EntityManager): Promise<Namespace[]> {
         return entityManager.find(Namespace, { where: { datastoreId: this.datastoreId }, withDeleted: true });
@@ -23,17 +36,19 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
         return makeKey(this.datastoreId, raw.path);
     }
 
-    create(entityManager: EntityManager, raw: RawNamespace): Namespace {
-        return entityManager.create(Namespace, {
+    create(raw: RawNamespace): QueryDeepPartialEntity<Namespace> {
+        return {
             datastoreId: this.datastoreId,
             name: raw.path.at(-1),
             path: raw.path,
-            parent: undefined, // Should be null either way, because it is new
-        });
+            parentId: null as unknown as number,
+            parent: null as unknown as Namespace,
+        };
     }
 
-    update(entityManager: EntityManager, entity: Namespace, raw: RawNamespace): void {
+    update(entity: Namespace, raw: RawNamespace): Namespace | QueryDeepPartialEntity<Namespace> {
         // No updatable fields
+        return entity;
     }
 
     mark(entity: Namespace, timestamp: Date): void {
@@ -46,6 +61,10 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
         }
+    }
+
+    updateId(entity: Namespace, id: ObjectLiteral): void {
+        entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {

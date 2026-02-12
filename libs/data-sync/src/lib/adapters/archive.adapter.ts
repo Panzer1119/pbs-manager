@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager } from "typeorm";
+import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
 import { Archive, ArchiveType, Group, Snapshot } from "@pbs-manager/database-schema";
 import { SnapshotAdapter } from "./snapshot.adapter";
@@ -19,6 +19,13 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         private readonly datastoreId: number,
         private readonly snapshotMap: Map<Key, Snapshot>
     ) {}
+
+    getTarget(): EntityTarget<ObjectLiteral> {
+        return Archive;
+    }
+    getCompositeKeyProperties(): (keyof Archive)[] {
+        return ["snapshotId", "type", "name"];
+    }
 
     async load(entityManager: EntityManager): Promise<Archive[]> {
         return entityManager.find(Archive, {
@@ -51,29 +58,35 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         return makeKey(raw.snapshotKey, raw.type, raw.name);
     }
 
-    create(entityManager: EntityManager, raw: RawArchive): Archive {
-        const snapshot: Snapshot | undefined = this.snapshotMap.get(raw.snapshotKey);
+    create(raw: RawArchive): QueryDeepPartialEntity<Archive> {
+        const snapshot: Snapshot | null = this.snapshotMap.get(raw.snapshotKey) ?? null;
         if (!snapshot) {
             throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
         }
-        return entityManager.create(Archive, {
+        return {
             datastoreId: this.datastoreId,
+            snapshotId: snapshot.id,
             snapshot,
             type: raw.type,
             name: raw.name,
             uuid: raw.uuid,
             creation: raw.creation,
             indexHashSHA256: raw.indexHashSHA256,
-        });
+        };
     }
 
-    update(entityManager: EntityManager, entity: Archive, raw: RawArchive): void {
-        const snapshot: Snapshot | undefined = raw.snapshotKey ? this.snapshotMap.get(raw.snapshotKey) : undefined;
+    update(entity: Archive, raw: RawArchive): Archive | QueryDeepPartialEntity<Archive> {
+        const snapshot: Snapshot | null = raw.snapshotKey ? (this.snapshotMap.get(raw.snapshotKey) ?? null) : null;
         if (!snapshot) {
             throw new Error(`Snapshot with key ${raw.snapshotKey} not found for Archive`);
         }
-        if (entity.snapshot?.id !== snapshot?.id || entity.snapshot?.time !== snapshot?.time) {
-            entity.snapshot = snapshot;
+        if (
+            (entity.snapshotId ?? null) !== (snapshot?.id ?? null) ||
+            entity.snapshot?.id !== snapshot?.id ||
+            entity.snapshot?.time !== snapshot?.time
+        ) {
+            entity.snapshotId = snapshot?.id as number;
+            entity.snapshot = snapshot as Snapshot;
         }
 
         if (entity.type !== raw.type) {
@@ -91,6 +104,7 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         if (entity.indexHashSHA256 !== raw.indexHashSHA256) {
             entity.indexHashSHA256 = raw.indexHashSHA256;
         }
+        return entity;
     }
 
     mark(entity: Archive, timestamp: Date): void {
@@ -103,6 +117,10 @@ export class ArchiveAdapter implements ReconcileAdapter<Archive, RawArchive> {
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
         }
+    }
+
+    updateId(entity: Archive, id: ObjectLiteral): void {
+        entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {

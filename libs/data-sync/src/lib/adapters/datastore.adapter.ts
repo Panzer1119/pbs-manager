@@ -1,5 +1,5 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
-import { EntityManager, UpdateQueryBuilder } from "typeorm";
+import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity, UpdateQueryBuilder } from "typeorm";
 import { makeKey } from "../engine/key";
 import { Datastore } from "@pbs-manager/database-schema";
 
@@ -15,6 +15,13 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
         private readonly datastoreMountpoints: string[] | null = null
     ) {}
 
+    getTarget(): EntityTarget<ObjectLiteral> {
+        return Datastore;
+    }
+    getCompositeKeyProperties(): (keyof Datastore)[] {
+        return ["hostId", "name"];
+    }
+
     async load(entityManager: EntityManager): Promise<Datastore[]> {
         return entityManager.find(Datastore, { where: { hostId: this.hostId }, withDeleted: true });
     }
@@ -27,21 +34,22 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
         return makeKey(raw.hostId, raw.mountpoint);
     }
 
-    create(entityManager: EntityManager, raw: RawDatastore): Datastore {
-        return entityManager.create(Datastore, {
+    create(raw: RawDatastore): QueryDeepPartialEntity<Datastore> {
+        return {
             hostId: raw.hostId,
             name: raw.name,
             mountpoint: raw.mountpoint,
-        });
+        };
     }
 
-    update(entityManager: EntityManager, entity: Datastore, raw: RawDatastore): void {
+    update(entity: Datastore, raw: RawDatastore): Datastore | QueryDeepPartialEntity<Datastore> {
         if (entity.name !== raw.name) {
             entity.name = raw.name;
         }
         if (entity.mountpoint !== raw.mountpoint) {
             entity.mountpoint = raw.mountpoint;
         }
+        return entity;
     }
 
     mark(entity: Datastore, timestamp: Date): void {
@@ -54,6 +62,10 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
         }
+    }
+
+    updateId(entity: Datastore, id: ObjectLiteral): void {
+        entity.id = id["id"];
     }
 
     async sweep(entityManager: EntityManager, timestamp: Date): Promise<void> {
