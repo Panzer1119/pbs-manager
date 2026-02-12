@@ -101,14 +101,22 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
         if (entity.name !== raw.name) {
             entity.name = raw.name;
         }
+
+        let hasChanges: boolean = false;
         if (entity.uuid !== raw.uuid) {
             entity.uuid = raw.uuid;
+            hasChanges = true;
         }
         if (entity.creation?.getTime() !== raw.creation?.getTime()) {
             entity.creation = raw.creation;
+            hasChanges = true;
         }
         if (entity.indexHashSHA256 !== raw.indexHashSHA256) {
             entity.indexHashSHA256 = raw.indexHashSHA256;
+            hasChanges = true;
+        }
+        if (hasChanges) {
+            entity.metadata.version++;
         }
         return entity;
     }
@@ -117,11 +125,17 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
         if (!entity.metadata) {
             entity.metadata = { creation: timestamp, update: timestamp, deletion: null as unknown as Date, version: 1 };
         }
+        let hasChanges: boolean = false;
         if (entity.metadata.update?.getTime() !== timestamp.getTime()) {
             entity.metadata.update = timestamp;
+            // hasChanges = true; // Do not spam the version number if only the update timestamp changes
         }
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
+            hasChanges = true;
+        }
+        if (hasChanges) {
+            entity.metadata.version++;
         }
     }
 

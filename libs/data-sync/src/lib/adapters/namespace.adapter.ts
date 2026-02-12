@@ -55,11 +55,17 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
         if (!entity.metadata) {
             entity.metadata = { creation: timestamp, update: timestamp, deletion: null as unknown as Date, version: 1 };
         }
+        let hasChanges: boolean = false;
         if (entity.metadata.update?.getTime() !== timestamp.getTime()) {
             entity.metadata.update = timestamp;
+            // hasChanges = true; // Do not spam the version number if only the update timestamp changes
         }
         if (entity.metadata.deletion != null) {
             entity.metadata.deletion = null as unknown as Date;
+            hasChanges = true;
+        }
+        if (hasChanges) {
+            entity.metadata.version++;
         }
     }
 
