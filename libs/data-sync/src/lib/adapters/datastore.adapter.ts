@@ -69,4 +69,27 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
         }
         await qb.execute();
     }
+
+    async filterExisting(entityManager: EntityManager, entityMap: Map<Key, Datastore>): Promise<Map<Key, Datastore>> {
+        const existingEntities: Datastore[] = await entityManager.findBy(Datastore, { hostId: this.hostId });
+        const existingKeys: Set<Key> = new Set(existingEntities.map(entity => this.entityKey(entity)));
+        for (const key of entityMap.keys()) {
+            if (!existingKeys.has(key)) {
+                entityMap.delete(key);
+            }
+        }
+        return entityMap;
+    }
+
+    async filterRelevant(entityManager: EntityManager, entityMap: Map<Key, Datastore>): Promise<Map<Key, Datastore>> {
+        if (!this.datastoreMountpoints) {
+            return entityMap;
+        }
+        for (const [key, entity] of entityMap.entries()) {
+            if (!entity.mountpoint || !this.datastoreMountpoints.includes(entity.mountpoint)) {
+                entityMap.delete(key);
+            }
+        }
+        return entityMap;
+    }
 }
