@@ -8,6 +8,7 @@ import { Key } from "../engine/adapter";
 import { Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { reconcile } from "../engine/reconcile";
 import { wireNamespaceParents } from "./wire-namespace";
+import { Logger } from "@nestjs/common";
 
 export interface ParsedData {
     datastores: RawDatastore[];
@@ -17,9 +18,16 @@ export interface ParsedData {
     archives: RawArchive[];
 }
 
-export async function runFullSync(entityManager: EntityManager, parsedData: ParsedData, hostId: number): Promise<void> {
+export async function runFullSync(
+    entityManager: EntityManager,
+    parsedData: ParsedData,
+    hostId: number,
+    logger: Logger
+): Promise<void> {
+    logger.log(`Starting full sync for host ID ${hostId}`);
     const timestamp: Date = new Date();
     // Datastores
+    logger.debug(`Syncing ${parsedData.datastores.length} datastore(s)`);
     const datastoreAdapter: DatastoreAdapter = new DatastoreAdapter(
         hostId,
         parsedData.datastores.map(ds => ds.mountpoint)
@@ -31,8 +39,10 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         datastoreAdapter,
         { filterRelevant: true }
     );
+    logger.log(`Completed datastore sync: ${datastoreMap.size} datastore(s) processed`);
 
     // Namespaces
+    logger.debug(`Syncing ${parsedData.namespaces.length} namespace(s) for ${datastoreMap.size} datastore(s)`);
     const namespaceMaps: Map<number, Map<Key, Namespace>> = new Map<number, Map<Key, Namespace>>();
     for (const datastore of datastoreMap.values()) {
         const datastoreNamespaces: RawNamespace[] = parsedData.namespaces.filter(
@@ -50,8 +60,12 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         await entityManager.save(Array.from(namespaceMap.values()));
         namespaceMaps.set(datastore.id, namespaceMap);
     }
+    logger.log(
+        `Completed namespace sync: ${Array.from(namespaceMaps.values()).reduce((acc, map) => acc + map.size, 0)} namespace(s) processed`
+    );
 
     // Groups
+    logger.debug(`Syncing ${parsedData.groups.length} group(s) for ${datastoreMap.size} datastore(s)`);
     const groupMaps: Map<number, Map<Key, Group>> = new Map<number, Map<Key, Group>>();
     for (const datastore of datastoreMap.values()) {
         const datastoreId: number = datastore.id;
@@ -71,8 +85,12 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         );
         groupMaps.set(datastoreId, groupMap);
     }
+    logger.log(
+        `Completed group sync: ${Array.from(groupMaps.values()).reduce((acc, map) => acc + map.size, 0)} group(s) processed`
+    );
 
     // Snapshots
+    logger.debug(`Syncing ${parsedData.snapshots.length} snapshot(s) for ${datastoreMap.size} datastore(s)`);
     const snapshotMaps: Map<number, Map<Key, Snapshot>> = new Map<number, Map<Key, Snapshot>>();
     for (const datastore of datastoreMap.values()) {
         const datastoreId: number = datastore.id;
@@ -92,8 +110,12 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         );
         snapshotMaps.set(datastoreId, snapshotMap);
     }
+    logger.log(
+        `Completed snapshot sync: ${Array.from(snapshotMaps.values()).reduce((acc, map) => acc + map.size, 0)} snapshot(s) processed`
+    );
 
     // Archives
+    logger.debug(`Syncing ${parsedData.archives.length} archive(s) for ${datastoreMap.size} datastore(s)`);
     for (const datastore of datastoreMap.values()) {
         const datastoreId: number = datastore.id;
         const snapshotMap: Map<Key, Snapshot> | undefined = snapshotMaps.get(datastoreId);
@@ -106,4 +128,6 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         const archiveAdapter: ArchiveAdapter = new ArchiveAdapter(datastoreId, snapshotMap);
         await reconcile<unknown, RawArchive>(entityManager, datastoreArchives, timestamp, archiveAdapter);
     }
+    logger.log(`Completed archive sync: ${parsedData.archives.length} archive(s) processed`);
+    logger.log(`Full sync completed for host ID ${hostId}`);
 }
