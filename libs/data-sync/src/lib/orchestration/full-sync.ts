@@ -28,7 +28,8 @@ export async function runFullSync(entityManager: EntityManager, parsedData: Pars
         entityManager,
         parsedData.datastores,
         timestamp,
-        datastoreAdapter
+        datastoreAdapter,
+        { filterRelevant: true }
     );
 
     // Namespaces
