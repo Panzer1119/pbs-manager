@@ -245,35 +245,58 @@ export function formatIndexFilePath(
     return posix.join(...pathParts);
 }
 
-export function archiveToFilePath<T extends Archive>(archive: T): string {
-    const snapshot: Snapshot | undefined = archive.snapshot;
+export function archiveToFilePath<T extends Archive>(
+    archive: T,
+    datastoreMap?: Map<number, Datastore>,
+    namespaceMap?: Map<number, Namespace>,
+    groupMap?: Map<number, Group>,
+    snapshotMap?: Map<number, Snapshot>
+): string {
+    let snapshot: Snapshot | undefined = archive.snapshot;
     // Check if the snapshot is loaded
     if (!snapshot) {
         if (!archive.snapshotId) {
             throw new Error(`Archive ${archive.id} does not have a snapshotId`);
+        } else if (snapshotMap) {
+            snapshot = snapshotMap.get(archive.snapshotId);
         }
-        throw new Error(`Archive ${archive.id} does not have snapshot relation loaded`);
+        if (!snapshot) {
+            throw new Error(`Archive ${archive.id} does not have snapshot relation loaded`);
+        }
     }
-    const group: Group | undefined = snapshot.group;
+    let group: Group | undefined = snapshot.group;
     // Check if the group is loaded
     if (!group) {
         if (!snapshot.groupId) {
             throw new Error(`Snapshot ${snapshot.id} does not have a groupId`);
+        } else if (groupMap) {
+            group = groupMap.get(snapshot.groupId);
         }
-        throw new Error(`Snapshot ${snapshot.id} does not have group relation loaded`);
+        if (!group) {
+            throw new Error(`Snapshot ${snapshot.id} does not have group relation loaded`);
+        }
     }
-    const datastore: Datastore | undefined = group.datastore;
+    let datastore: Datastore | undefined = group.datastore;
     // Check if the datastore is loaded
     if (!datastore) {
         if (!group.datastoreId) {
             throw new Error(`Group ${group.id} does not have a datastoreId`);
+        } else if (datastoreMap) {
+            datastore = datastoreMap.get(group.datastoreId);
         }
-        throw new Error(`Group ${group.id} does not have datastore relation loaded`);
+        if (!datastore) {
+            throw new Error(`Group ${group.id} does not have datastore relation loaded`);
+        }
     }
-    const namespace: Namespace | undefined = group.namespace;
+    let namespace: Namespace | undefined = group.namespace;
     // Check if the namespace is loaded
     if (!namespace && group.namespaceId) {
-        throw new Error(`Group ${group.id} does not have namespace relation loaded`);
+        if (namespaceMap) {
+            namespace = namespaceMap.get(group.namespaceId);
+        }
+        if (!namespace) {
+            throw new Error(`Group ${group.id} does not have namespace relation loaded`);
+        }
     }
     return formatIndexFilePath(datastore, namespace, group, snapshot, archive);
 }
