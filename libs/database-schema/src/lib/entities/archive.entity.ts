@@ -50,7 +50,7 @@ export class Archive {
 
     @Index()
     @Column({ nullable: true, default: false })
-    indexParsed!: boolean;
+    isIndexParsed!: boolean;
 
     @Index()
     @Column({ nullable: true })

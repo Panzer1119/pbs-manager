@@ -12,3 +12,4 @@ export * from "./migrations/1770864287739-ConvertSomePartialIndexesToFullNullNot
 export * from "./migrations/1771001621849-AddIndexParsedToArchive";
 export * from "./migrations/1771002026597-AddProtectedToSnapshot";
 export * from "./migrations/1771014699700-AddIsMissingChunksToArchive";
+export * from "./migrations/1771014769922-RenameIndexParsedOfArchiveToIsIndexParsed";
