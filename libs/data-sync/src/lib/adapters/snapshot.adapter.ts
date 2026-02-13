@@ -29,7 +29,7 @@ export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> 
             where: { datastoreId: this.datastoreId },
             relations: { group: { datastore: true, namespace: true } },
             withDeleted: true,
-            lock: { mode: "pessimistic_write" },
+            // lock: { mode: "pessimistic_write" }, // QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join
         });
     }
 

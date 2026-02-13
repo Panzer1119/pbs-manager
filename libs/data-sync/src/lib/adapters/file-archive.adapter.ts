@@ -30,7 +30,7 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
             where: { datastoreId: this.datastoreId },
             relations: { snapshot: { group: { datastore: true, namespace: true } } },
             withDeleted: true,
-            lock: { mode: "pessimistic_write" },
+            // lock: { mode: "pessimistic_write" }, // QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join
         });
     }
 
