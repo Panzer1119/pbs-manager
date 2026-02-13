@@ -50,6 +50,7 @@ export class ArchiveService {
                               { isIndexParsed: false, datastoreId },
                               { isMissingChunks: true, datastoreId },
                           ],
+                    order: { metadata: { creation: "DESC" } },
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
@@ -62,6 +63,7 @@ export class ArchiveService {
                               { isIndexParsed: false, datastoreId },
                               { isIndexParsed: true, datastoreId },
                           ],
+                    order: { metadata: { creation: "DESC" } },
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
