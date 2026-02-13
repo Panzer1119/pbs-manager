@@ -59,7 +59,7 @@ export class SSHProcessor extends WorkerHost implements OnModuleInit {
         this.logger.verbose(`Initialized ${JSON.stringify(SSHProcessor.QUEUE_NAME)} queue processor`);
     }
 
-    async process(job: SSHJob<unknown, unknown, SSHJobName>, token?: string): Promise<unknown> {
+    async process(job: SSHJob<unknown, unknown>, token?: string): Promise<unknown> {
         this.logger.verbose(
             `Processing job ${JSON.stringify(job.name)} with id ${JSON.stringify(job.id)} and token ${JSON.stringify(token)}`
         );
