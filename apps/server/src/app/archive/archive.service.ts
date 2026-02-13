@@ -320,9 +320,9 @@ export class ArchiveService {
                             //TODO What about the digests that don't have matching Chunks in the database?
                             // Should we create new Chunk entries for them?
                             // For now, we just skip linking those digests to the archive.
-                            this.logger.warn(
-                                `No matching Chunk found for digest ${digest} in index path ${index.path}, skipping relation`
-                            );
+                            // this.logger.warn(
+                            //     `No matching Chunk found for digest ${digest} in index path ${index.path}, skipping relation`
+                            // );
                             // Mark the archive as having missing chunks so we can easily find and reprocess it later once the missing chunks are added to the database
                             archive.isMissingChunks = true;
                             continue;
