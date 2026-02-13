@@ -259,8 +259,10 @@ export function archiveToFilePath<T extends Archive>(
             throw new Error(`Archive ${archive.id} does not have a snapshotId`);
         } else if (snapshotMap) {
             snapshot = snapshotMap.get(archive.snapshotId);
-        }
-        if (!snapshot) {
+            if (!snapshot) {
+                throw new Error(`Snapshot with id ${archive.snapshotId} not found in snapshotMap`);
+            }
+        } else {
             throw new Error(`Archive ${archive.id} does not have snapshot relation loaded`);
         }
     }
@@ -271,8 +273,10 @@ export function archiveToFilePath<T extends Archive>(
             throw new Error(`Snapshot ${snapshot.id} does not have a groupId`);
         } else if (groupMap) {
             group = groupMap.get(snapshot.groupId);
-        }
-        if (!group) {
+            if (!group) {
+                throw new Error(`Group with id ${snapshot.groupId} not found in groupMap`);
+            }
+        } else {
             throw new Error(`Snapshot ${snapshot.id} does not have group relation loaded`);
         }
     }
@@ -283,8 +287,10 @@ export function archiveToFilePath<T extends Archive>(
             throw new Error(`Group ${group.id} does not have a datastoreId`);
         } else if (datastoreMap) {
             datastore = datastoreMap.get(group.datastoreId);
-        }
-        if (!datastore) {
+            if (!datastore) {
+                throw new Error(`Datastore with id ${group.datastoreId} not found in datastoreMap`);
+            }
+        } else {
             throw new Error(`Group ${group.id} does not have datastore relation loaded`);
         }
     }
@@ -293,8 +299,10 @@ export function archiveToFilePath<T extends Archive>(
     if (!namespace && group.namespaceId) {
         if (namespaceMap) {
             namespace = namespaceMap.get(group.namespaceId);
-        }
-        if (!namespace) {
+            if (!namespace) {
+                throw new Error(`Namespace with id ${group.namespaceId} not found in namespaceMap`);
+            }
+        } else {
             throw new Error(`Group ${group.id} does not have namespace relation loaded`);
         }
     }
