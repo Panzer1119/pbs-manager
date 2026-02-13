@@ -340,10 +340,12 @@ export class ArchiveService {
                         chunkCountById.set(chunkId, (chunkCountById.get(chunkId) ?? 0) + 1);
                     }
                     const existingArchiveChunks: ArchiveChunk[] = archiveChunksByArchiveId.get(archiveId) ?? [];
+                    const existingArchiveChunksByChunkId: Map<number, ArchiveChunk> = new Map(
+                        existingArchiveChunks.map(ac => [ac.chunkId, ac])
+                    );
                     for (const [chunkId, count] of chunkCountById.entries()) {
-                        const existingArchiveChunk: ArchiveChunk | undefined = existingArchiveChunks.find(
-                            ac => ac.chunkId === chunkId
-                        );
+                        const existingArchiveChunk: ArchiveChunk | undefined =
+                            existingArchiveChunksByChunkId.get(chunkId);
                         if (existingArchiveChunk) {
                             if (existingArchiveChunk.count !== count) {
                                 // If the count has changed, we need to update the existing relation
