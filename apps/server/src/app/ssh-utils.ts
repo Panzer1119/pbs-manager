@@ -21,7 +21,7 @@ export type ParseKeyOptions = string | (Format.ReadOptions & { filename?: string
 export type WriteKeyOptions = Format.WriteOptions;
 export type KeyDataType = string | Buffer;
 export type FingerprintDataType = string | Buffer;
-export type SSHConnectionData = { sshConnectionId: number } | Config;
+export type SSHConnectionData = { sshConnectionId: number } | SSHConnection | Config;
 
 export interface SSHKeyTransformerOptionsGeneric<T extends KeyFormatType> {
     format?: T;
@@ -246,15 +246,18 @@ export async function createSSHConfig(
     data: SSHConnectionData,
     debug?: DebugFunction
 ): Promise<Config> {
-    if ("host" in data) {
+    if ("host" in data && !("id" in data)) {
         return data;
     } else if (!("sshConnectionId" in data)) {
         throw new Error(`Invalid SSH connection data provided: ${JSON.stringify(data)}`);
     }
-    const sshConnection: SSHConnection | null = await entityManager.findOne(SSHConnection, {
-        where: { id: data.sshConnectionId },
-        relations: { sshKeypair: true, remoteHostKeys: true },
-    });
+    const sshConnection: SSHConnection | null =
+        data["sshKeypair"] != null && data["remoteHostKeys"] != null
+            ? (data as unknown as SSHConnection)
+            : await entityManager.findOne(SSHConnection, {
+                  where: { id: data.sshConnectionId },
+                  relations: { sshKeypair: true, remoteHostKeys: true },
+              });
     if (!sshConnection) {
         throw new Error(`SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
     }
