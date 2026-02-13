@@ -84,9 +84,14 @@ export class ArchiveService {
                 );
                 this.logger.verbose(`Loaded ${datastores.length} datastore(s) for archive parsing`);
                 // Build file paths for the archives based on the loaded data
-                const fileArchivePaths: string[] = [...fileArchives, ...imageArchives].map(archive =>
-                    archiveToFilePath(archive, datastoreMap, namespaceMap, groupMap, snapshotMap)
+                const fileArchivePaths: string[] = Array.from(
+                    new Set(
+                        [...fileArchives, ...imageArchives].map(archive =>
+                            archiveToFilePath(archive, datastoreMap, namespaceMap, groupMap, snapshotMap)
+                        )
+                    )
                 );
+                fileArchivePaths.sort(); // Ensure consistent processing order
                 this.logger.debug(fileArchivePaths); //TODO Remove this debug log after testing
                 if (!sshConnection) {
                     this.logger.verbose(
