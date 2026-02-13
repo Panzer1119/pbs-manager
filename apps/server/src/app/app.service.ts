@@ -13,18 +13,17 @@ import {
     Namespace,
     Snapshot,
 } from "@pbs-manager/database-schema";
-import { useSSHConnection } from "./ssh-utils";
+import { useSFTPConnection, useSSHConnection } from "./ssh-utils";
 import {
     ArchiveMetadata,
     buildIndexFileFindCommandArray,
     GroupMetadata,
-    Indices,
-    parseIndexFilePaths,
-    parseRemoteIndexFilesWithSSHConnectionId,
+    parseIndexFilePaths as parseIndexFilePathsOld,
 } from "./pbs-index";
 import { InjectQueue } from "@nestjs/bullmq";
 import { SSHProcessor } from "./ssh/ssh.processor";
 import { Queue } from "bullmq";
+import { Indices, parseRemoteIndexFilesWithSFTP } from "@pbs-manager/data-sync";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -124,7 +123,7 @@ export class AppService implements OnModuleInit {
 
                 const paths: string[] = stdout.split("\x00").filter(path => path.trim() !== "");
                 this.logger.verbose(`Found ${paths.length} index files on disk for datastoreId ${datastoreId}`);
-                const archivesByDatastore: Record<string, ArchiveMetadata[]> = parseIndexFilePaths(
+                const archivesByDatastore: Record<string, ArchiveMetadata[]> = parseIndexFilePathsOld(
                     paths,
                     datastoreMountpoint,
                     hostId
@@ -157,10 +156,10 @@ export class AppService implements OnModuleInit {
                 }
 
                 this.logger.verbose(`Processing index files in partitions for datastoreId ${datastoreId}`);
-                const { dynamic, fixed }: Indices = await parseRemoteIndexFilesWithSSHConnectionId(
+                const { dynamic, fixed }: Indices = await useSFTPConnection(
                     entityManagerOuter,
-                    sshConnectionId,
-                    paths.filter(_ => Math.random() >= 0.99).slice(0, 100)
+                    { sshConnectionId },
+                    sftp => parseRemoteIndexFilesWithSFTP(sftp, paths.filter(_ => Math.random() >= 0.99).slice(0, 100))
                 );
                 this.logger.verbose(
                     `Parsed ${dynamic.length} dynamic and ${fixed.length} fixed indices for datastoreId ${datastoreId}`
