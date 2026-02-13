@@ -52,6 +52,10 @@ export class Archive {
     @Column({ nullable: true, default: false })
     indexParsed!: boolean;
 
+    @Index()
+    @Column({ nullable: true })
+    isMissingChunks?: boolean;
+
     @Column("uuid", { nullable: true })
     uuid?: string;
 
