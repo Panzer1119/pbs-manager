@@ -146,6 +146,25 @@ export class ArchiveService {
                 this.logger.verbose(
                     `Parsed ${dynamic.length} dynamic index entry(ies) and ${fixed.length} fixed index entry(ies) for datastore ID ${datastoreId}`
                 );
+                // Determine missing index files
+                const fileArchivesToDeleteMap: Map<string, FileArchive> = new Map(fileArchiveByPath);
+                const imageArchivesToDeleteMap: Map<string, ImageArchive> = new Map(imageArchiveByPath);
+                for (const dynamicIndex of dynamic) {
+                    fileArchivesToDeleteMap.delete(dynamicIndex.path);
+                }
+                for (const fixedIndex of fixed) {
+                    imageArchivesToDeleteMap.delete(fixedIndex.path);
+                }
+                const fileArchivesToDelete: FileArchive[] = Array.from(fileArchivesToDeleteMap.values());
+                const imageArchivesToDelete: ImageArchive[] = Array.from(imageArchivesToDeleteMap.values());
+                if (fileArchivesToDelete.length > 0 || imageArchivesToDelete.length > 0) {
+                    this.logger.verbose(
+                        `Marking ${fileArchivesToDelete.length} FileArchive(s) and ${imageArchivesToDelete.length} ImageArchive(s) for deletion due to missing index files`
+                    );
+                    await transactionalEntityManager.softRemove([...fileArchivesToDelete, ...imageArchivesToDelete], {
+                        chunk: 1000,
+                    });
+                }
                 // Collect Chunk digests from the parsed indices for later processing (e.g., linking to Archives)
                 const chunkDigests: Set<string> = new Set();
                 for (const dynamicIndex of dynamic) {
