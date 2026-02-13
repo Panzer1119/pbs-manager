@@ -43,14 +43,14 @@ export class ArchiveService {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
                 // Load unparsed file archives with pessimistic locking to prevent concurrent processing
                 const fileArchives: FileArchive[] = await transactionalEntityManager.find(FileArchive, {
-                    where: { indexParsed: false, datastoreId },
+                    where: { isIndexParsed: false, datastoreId },
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
                 this.logger.debug(`Found ${fileArchives.length} unparsed file archive(s)`);
                 // Load unparsed image archives with pessimistic locking to prevent concurrent processing
                 const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
-                    where: { indexParsed: false, datastoreId },
+                    where: { isIndexParsed: false, datastoreId },
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
@@ -249,8 +249,8 @@ export class ArchiveService {
                         fileArchive.indexHashSHA256 = dynamicIndex.checksum ?? null;
                         hasChanges = true;
                     }
-                    if (!fileArchive.indexParsed) {
-                        fileArchive.indexParsed = true;
+                    if (!fileArchive.isIndexParsed) {
+                        fileArchive.isIndexParsed = true;
                         hasChanges = true;
                     }
                     if (hasChanges) {
@@ -294,8 +294,8 @@ export class ArchiveService {
                         imageArchive.chunkSizeBytes = fixedIndex.chunkSizeBytes ?? null;
                         hasChanges = true;
                     }
-                    if (!imageArchive.indexParsed) {
-                        imageArchive.indexParsed = true;
+                    if (!imageArchive.isIndexParsed) {
+                        imageArchive.isIndexParsed = true;
                         hasChanges = true;
                     }
                     if (hasChanges) {
@@ -317,6 +317,11 @@ export class ArchiveService {
                     if (!index.digests) {
                         continue;
                     }
+                    const isFileArchive: boolean = fileArchiveByPath.has(index.path);
+                    const archive: FileArchive | ImageArchive | undefined = isFileArchive
+                        ? fileArchiveByPath.get(index.path)
+                        : imageArchiveByPath.get(index.path);
+                    const archiveId: number = archive.id;
                     // Process digests and count occurrences for the current index
                     const chunkCountById: Map<number, number> = new Map();
                     for (const digest of index.digests) {
@@ -328,15 +333,12 @@ export class ArchiveService {
                             this.logger.warn(
                                 `No matching Chunk found for digest ${digest} in index path ${index.path}, skipping relation`
                             );
+                            // Mark the archive as having missing chunks so we can easily find and reprocess it later once the missing chunks are added to the database
+                            archive.isMissingChunks = true;
                             continue;
                         }
                         chunkCountById.set(chunkId, (chunkCountById.get(chunkId) ?? 0) + 1);
                     }
-                    const isFileArchive: boolean = fileArchiveByPath.has(index.path);
-                    const archive: FileArchive | ImageArchive | undefined = isFileArchive
-                        ? fileArchiveByPath.get(index.path)
-                        : imageArchiveByPath.get(index.path);
-                    const archiveId: number = archive.id;
                     const existingArchiveChunks: ArchiveChunk[] = archiveChunksByArchiveId.get(archiveId) ?? [];
                     for (const [chunkId, count] of chunkCountById.entries()) {
                         const existingArchiveChunk: ArchiveChunk | undefined = existingArchiveChunks.find(
