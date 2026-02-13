@@ -4,6 +4,8 @@ import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { Key } from "../engine/adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
 import { posix } from "path";
+import { ReadStream, SFTPWrapper } from "ssh2";
+import { buffer } from "stream/consumers";
 
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED = "31b958426fb6a37f";
@@ -416,4 +418,29 @@ export function parseIndex(data: Buffer, path?: string): Index {
     }
     // Throw an error if the magic number is unknown
     throw new Error(`Unknown magic number: ${magicNumberHex}`);
+}
+
+// Parse via SFTP
+
+export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: string[]): Promise<Indices> {
+    const fixedIndexArray: FixedIndex[] = [];
+    const dynamicIndexArray: DynamicIndex[] = [];
+    for (const path of paths) {
+        const readStream: ReadStream = sftp.createReadStream(path);
+        const data: Buffer = await buffer(readStream);
+        const index: Index = parseIndex(data, path);
+        // Clear the buffer
+        data.fill(0);
+        switch (index.magicNumberHex) {
+            case MAGIC_NUMBER_HEX_FIXED_INDEX:
+                fixedIndexArray.push(index as FixedIndex);
+                break;
+            case MAGIC_NUMBER_HEX_DYNAMIC_INDEX:
+                dynamicIndexArray.push(index as DynamicIndex);
+                break;
+            default:
+                throw new Error(`Unknown magic number: ${index["magicNumberHex"]} for file ${JSON.stringify(path)}`);
+        }
+    }
+    return { dynamic: dynamicIndexArray, fixed: fixedIndexArray };
 }
