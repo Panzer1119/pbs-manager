@@ -30,6 +30,7 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
             where: { datastoreId: this.datastoreId },
             relations: { snapshot: { group: { datastore: true, namespace: true } } },
             withDeleted: true,
+            lock: { mode: "pessimistic_write" },
         });
     }
 

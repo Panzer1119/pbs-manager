@@ -24,7 +24,11 @@ export class DatastoreAdapter implements ReconcileAdapter<Datastore, RawDatastor
     }
 
     async load(entityManager: EntityManager): Promise<Datastore[]> {
-        return entityManager.find(Datastore, { where: { hostId: this.hostId }, withDeleted: true });
+        return entityManager.find(Datastore, {
+            where: { hostId: this.hostId },
+            withDeleted: true,
+            lock: { mode: "pessimistic_write" },
+        });
     }
 
     entityKey(entity: Datastore): Key {

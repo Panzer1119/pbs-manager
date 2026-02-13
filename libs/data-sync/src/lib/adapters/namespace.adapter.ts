@@ -25,7 +25,11 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
     // }
 
     async load(entityManager: EntityManager): Promise<Namespace[]> {
-        return entityManager.find(Namespace, { where: { datastoreId: this.datastoreId }, withDeleted: true });
+        return entityManager.find(Namespace, {
+            where: { datastoreId: this.datastoreId },
+            withDeleted: true,
+            lock: { mode: "pessimistic_write" },
+        });
     }
 
     entityKey(entity: Namespace): Key {

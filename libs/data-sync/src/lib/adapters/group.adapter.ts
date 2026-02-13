@@ -29,6 +29,7 @@ export class GroupAdapter implements ReconcileAdapter<Group, RawGroup> {
             where: { datastoreId: this.datastoreId },
             relations: { datastore: true, namespace: true },
             withDeleted: true,
+            lock: { mode: "pessimistic_write" },
         });
     }
 
