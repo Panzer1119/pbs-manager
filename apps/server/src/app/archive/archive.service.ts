@@ -157,16 +157,25 @@ export class ArchiveService {
                     }
                 }
                 // Load existing Chunks based on the collected digests with pessimistic locking to prevent concurrent processing
-                this.logger.verbose(
-                    `Loading existing chunk ids for ${chunkDigests.size} unique digest(s) for datastore ID ${datastoreId}`
-                );
-                const chunks: { id: number; hash_sha256: string }[] = await transactionalEntityManager
-                    .createQueryBuilder(Chunk, "chunk")
-                    .select(["id", "hash_sha256"])
-                    .where("datastore_id = :datastoreId", { datastoreId })
-                    .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
-                    .setLock("pessimistic_read")
-                    .getRawMany();
+                if (chunkDigests.size === 0) {
+                    this.logger.warn(
+                        `No chunk digests found in parsed indices for datastore ID ${datastoreId}, skipping chunk loading and archive-chunk relation processing`
+                    );
+                } else {
+                    this.logger.verbose(
+                        `Loading existing chunk ids for ${chunkDigests.size} unique digest(s) for datastore ID ${datastoreId}`
+                    );
+                }
+                const chunks: { id: number; hash_sha256: string }[] =
+                    chunkDigests.size === 0
+                        ? []
+                        : await transactionalEntityManager
+                              .createQueryBuilder(Chunk, "chunk")
+                              .select(["id", "hash_sha256"])
+                              .where("datastore_id = :datastoreId", { datastoreId })
+                              .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
+                              .setLock("pessimistic_read")
+                              .getRawMany();
                 const chunkIdByDigest: Map<string, number> = new Map(
                     chunks.map(chunk => [chunk.hash_sha256, chunk.id])
                 );
