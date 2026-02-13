@@ -1,8 +1,9 @@
 import { ParsedData } from "../orchestration/full-sync";
-import { ArchiveType, BackupType } from "@pbs-manager/database-schema";
+import { Archive, ArchiveType, BackupType, Datastore, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
 import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { Key } from "../engine/adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
+import { posix } from "path";
 
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED = "31b958426fb6a37f";
@@ -198,6 +199,74 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
         }
     }
     return parsedData;
+}
+
+export function archiveTypeToFileExtension(
+    archiveType: ArchiveType
+): FILE_EXTENSION_DYNAMIC_INDEX | FILE_EXTENSION_FIXED_INDEX {
+    switch (archiveType) {
+        case ArchiveType.File:
+            return FILE_EXTENSION_DYNAMIC_INDEX;
+        case ArchiveType.Image:
+            return FILE_EXTENSION_FIXED_INDEX;
+        default:
+            throw new Error(`Unknown archive type: ${archiveType}`);
+    }
+}
+
+export function formatIndexFilePath(
+    datastore: Datastore,
+    namespace: Namespace | undefined,
+    group: Group,
+    snapshot: Snapshot,
+    archive: Archive
+): string {
+    if (!datastore.mountpoint) {
+        throw new Error(`Datastore ${datastore.name} does not have a mountpoint`);
+    }
+    if (namespace && !namespace.path) {
+        throw new Error(`Namespace ${namespace.path} does not have a path`);
+    }
+    const pathParts: string[] = [];
+    // Add the datastore mountpoint
+    pathParts.push(datastore.mountpoint);
+    // Add the namespace path if it exists, replacing every "/" with "/ns/"
+    if (namespace?.path) {
+        const formattedNamespacePath: string = namespace.path.replace(/\//g, "/ns/");
+        pathParts.push("ns", formattedNamespacePath);
+    }
+    // Add the group type and backup id
+    pathParts.push(group.type, group.backupId);
+    // Add the snapshot timestamp
+    pathParts.push(snapshot.time.toISOString().replace(/\.000Z$/m, "Z"));
+    // Add the archive name and file extension
+    pathParts.push(`${archive.name}.${archiveTypeToFileExtension(archive.type)}`);
+    // Join and normalize the parts of the path
+    return posix.join(...pathParts);
+}
+
+export function archiveToFilePath<T extends Archive>(archive: T): string {
+    const snapshot: Snapshot | undefined = archive.snapshot;
+    // Check if the snapshot is loaded
+    if (!snapshot) {
+        throw new Error(`Archive ${archive.id} does not have snapshot relation loaded`);
+    }
+    const group: Group | undefined = snapshot.group;
+    // Check if the group is loaded
+    if (!group) {
+        throw new Error(`Snapshot ${snapshot.id} does not have group relation loaded`);
+    }
+    const datastore: Datastore | undefined = group.datastore;
+    // Check if the datastore is loaded
+    if (!datastore) {
+        throw new Error(`Group ${group.id} does not have datastore relation loaded`);
+    }
+    const namespace: Namespace | undefined = group.namespace;
+    // Check if the namespace is loaded
+    if (!namespace && group.namespaceId) {
+        throw new Error(`Group ${group.id} does not have namespace relation loaded`);
+    }
+    return formatIndexFilePath(datastore, namespace, group, snapshot, archive);
 }
 
 // Parsing Binary Functions
