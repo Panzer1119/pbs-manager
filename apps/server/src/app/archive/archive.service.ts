@@ -363,12 +363,15 @@ export class ArchiveService {
                 this.logger.debug(
                     `Prepared ${archiveChunksToInsert.length} new ArchiveChunk relation(s) for insertion, ${archiveChunksToUpdate.length} existing relation(s) for update, and ${archiveChunksToDelete.length} existing relation(s) for deletion based on parsed indices for datastore ID ${datastoreId}`
                 );
-                await transactionalEntityManager.save(ArchiveChunk, archiveChunksToInsert, { chunk: 1000 });
-                // await transactionalEntityManager.insert(ArchiveChunk, archiveChunksToInsert);
-                await transactionalEntityManager.upsert(ArchiveChunk, archiveChunksToUpdate, {
-                    conflictPaths: ["archiveId", "chunkId"],
-                    upsertType: "on-conflict-do-update",
-                });
+                for (const archiveChunkBatch of partitionArray(archiveChunksToInsert, 1000)) {
+                    await transactionalEntityManager.insert(ArchiveChunk, archiveChunkBatch);
+                }
+                for (const archiveChunkBatch of partitionArray(archiveChunksToUpdate, 1000)) {
+                    await transactionalEntityManager.upsert(ArchiveChunk, archiveChunkBatch, {
+                        conflictPaths: ["archiveId", "chunkId"],
+                        upsertType: "on-conflict-do-update",
+                    });
+                }
                 await transactionalEntityManager.remove(ArchiveChunk, archiveChunksToDelete, { chunk: 1000 });
             });
             this.logger.log(`Completed archive index parsing for datastore ID ${datastoreId}`);
