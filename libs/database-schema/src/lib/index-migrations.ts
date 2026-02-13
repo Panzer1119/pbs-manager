@@ -10,3 +10,4 @@ export * from "./migrations/1770844617181-AddDatastoreToGroupAndArchive";
 export * from "./migrations/1770864070055-ConvertSomePartialIndexesToFullIndexes";
 export * from "./migrations/1770864287739-ConvertSomePartialIndexesToFullNullNotDistinctIndexes";
 export * from "./migrations/1771001621849-AddIndexParsedToArchive";
+export * from "./migrations/1771002026597-AddProtectedToSnapshot";

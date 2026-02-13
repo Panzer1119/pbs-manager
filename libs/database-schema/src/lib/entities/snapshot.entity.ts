@@ -34,6 +34,9 @@ export class Snapshot {
     @Column("timestamptz")
     time!: Date;
 
+    @Column({ nullable: true })
+    protected?: boolean;
+
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
 
