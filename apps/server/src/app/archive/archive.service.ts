@@ -295,7 +295,9 @@ export class ArchiveService {
                 this.logger.debug(
                     `Prepared ${imageArchivesToUpdate.length} ImageArchive(s) for update based on fixed indices`
                 );
-                await transactionalEntityManager.save([...fileArchivesToUpdate, ...imageArchivesToUpdate]);
+                await transactionalEntityManager.save([...fileArchivesToUpdate, ...imageArchivesToUpdate], {
+                    chunk: 1000,
+                });
                 // Process digests from dynamic and fixed indices and create ArchiveChunk relations as needed
                 this.logger.verbose(
                     `Processing chunk digests from parsed indices and preparing ArchiveChunk relations for update for datastore ID ${datastoreId}`
