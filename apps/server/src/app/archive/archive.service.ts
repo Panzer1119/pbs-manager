@@ -16,6 +16,12 @@ import { archiveToFilePath, Indices, parseRemoteIndexFilesWithSFTP } from "@pbs-
 import { DatastoreService } from "../datastore/datastore.service";
 import { useSFTPConnection } from "../ssh-utils";
 
+function* partitionArray<T>(arr: T[], size: number): Generator<T[]> {
+    for (let i = 0; i < arr.length; i += size) {
+        yield arr.slice(i, i + size);
+    }
+}
+
 @Injectable()
 export class ArchiveService {
     private readonly logger: Logger = new Logger(ArchiveService.name);
@@ -24,7 +30,7 @@ export class ArchiveService {
         @InjectDataSource() private readonly dataSource: DataSource,
         private readonly datastoreService: DatastoreService
     ) {
-        setTimeout(() => this.parseMissingArchiveIndexes(1), 1000);
+        setTimeout(() => this.parseMissingArchiveIndexes(1, 100), 1000);
     }
 
     async parseMissingArchiveIndexes(
@@ -166,16 +172,28 @@ export class ArchiveService {
                         `Loading existing chunk ids for ${chunkDigests.size} unique digest(s) for datastore ID ${datastoreId}`
                     );
                 }
-                const chunks: { id: number; hash_sha256: string }[] =
-                    chunkDigests.size === 0
-                        ? []
-                        : await transactionalEntityManager
-                              .createQueryBuilder(Chunk, "chunk")
-                              .select(["id", "hash_sha256"])
-                              .where("datastore_id = :datastoreId", { datastoreId })
-                              .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
-                              .setLock("pessimistic_read")
-                              .getRawMany();
+                // const chunks: { id: number; hash_sha256: string }[] =
+                //     chunkDigests.size === 0
+                //         ? []
+                //         : await transactionalEntityManager
+                //               .createQueryBuilder(Chunk, "chunk")
+                //               .select(["id", "hash_sha256"])
+                //               .where("datastore_id = :datastoreId", { datastoreId })
+                //               .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
+                //               .setLock("pessimistic_read")
+                //               .getRawMany();
+                const chunks: { id: number; hash_sha256: string }[] = [];
+                for (const digestBatch of partitionArray(Array.from(chunkDigests), 10000)) {
+                    chunks.push(
+                        ...(await transactionalEntityManager
+                            .createQueryBuilder(Chunk, "chunk")
+                            .select(["id", "hash_sha256"])
+                            .where("datastore_id = :datastoreId", { datastoreId })
+                            .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(digestBatch) })
+                            .setLock("pessimistic_read")
+                            .getRawMany())
+                    );
+                }
                 const chunkIdByDigest: Map<string, number> = new Map(
                     chunks.map(chunk => [chunk.hash_sha256, chunk.id])
                 );
