@@ -4,7 +4,7 @@ import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { Key } from "../engine/adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
 import { posix } from "path";
-import { ReadStream, SFTPWrapper } from "ssh2";
+import { ReadStream, SFTPWrapper, Stats } from "ssh2";
 import { buffer } from "stream/consumers";
 
 export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
@@ -426,6 +426,20 @@ export async function parseRemoteIndexFilesWithSFTP(sftp: SFTPWrapper, paths: st
     const fixedIndexArray: FixedIndex[] = [];
     const dynamicIndexArray: DynamicIndex[] = [];
     for (const path of paths) {
+        const exists: boolean = await new Promise<boolean>(
+            (resolve: (value: boolean) => void, reject: () => void): void => {
+                const timer: NodeJS.Timeout = setTimeout((): void => reject(), 5000);
+                sftp.stat(path, (err: Error | undefined, stats: Stats): void => {
+                    clearTimeout(timer);
+                    resolve(!err && stats.isFile());
+                });
+            }
+        );
+        if (!exists) {
+            // throw new Error(`File ${path} does not exist on remote server`);
+            // Silently fail, we can check for missing indices later
+            continue;
+        }
         const readStream: ReadStream = sftp.createReadStream(path);
         const data: Buffer = await buffer(readStream);
         const index: Index = parseIndex(data, path);
