@@ -1,4 +1,7 @@
 import { Module } from "@nestjs/common";
+import { ArchiveService } from "./archive.service";
 
-@Module({})
+@Module({
+    providers: [ArchiveService],
+})
 export class ArchiveModule {}
