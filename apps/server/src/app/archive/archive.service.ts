@@ -72,10 +72,13 @@ export class ArchiveService {
                 const namespaceIds: Set<number> = new Set(
                     groups.map(group => group.namespaceId).filter(id => id != null)
                 );
-                const namespaces: Namespace[] = await transactionalEntityManager.find(Namespace, {
-                    where: { id: In(Array.from(namespaceIds)) },
-                    lock: { mode: "pessimistic_read" },
-                });
+                const namespaces: Namespace[] =
+                    namespaceIds.size === 0
+                        ? []
+                        : await transactionalEntityManager.find(Namespace, {
+                              where: { id: In(Array.from(namespaceIds)) },
+                              lock: { mode: "pessimistic_read" },
+                          });
                 const namespaceMap: Map<number, Namespace> = new Map(
                     namespaces.map(namespace => [namespace.id, namespace])
                 );
