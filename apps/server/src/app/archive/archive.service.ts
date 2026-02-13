@@ -172,16 +172,6 @@ export class ArchiveService {
                         `Loading existing chunk ids for ${chunkDigests.size} unique digest(s) for datastore ID ${datastoreId}`
                     );
                 }
-                // const chunks: { id: number; hash_sha256: string }[] =
-                //     chunkDigests.size === 0
-                //         ? []
-                //         : await transactionalEntityManager
-                //               .createQueryBuilder(Chunk, "chunk")
-                //               .select(["id", "hash_sha256"])
-                //               .where("datastore_id = :datastoreId", { datastoreId })
-                //               .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
-                //               .setLock("pessimistic_read")
-                //               .getRawMany();
                 const chunks: { id: number; hash_sha256: string }[] = [];
                 for (const digestBatch of partitionArray(Array.from(chunkDigests), 10000)) {
                     chunks.push(
