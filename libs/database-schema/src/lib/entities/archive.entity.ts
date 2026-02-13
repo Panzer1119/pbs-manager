@@ -48,6 +48,10 @@ export class Archive {
     @Column({ length: 255 })
     name!: string;
 
+    @Index()
+    @Column({ nullable: true, default: false })
+    indexParsed!: boolean;
+
     @Column("uuid", { nullable: true })
     uuid?: string;
 
