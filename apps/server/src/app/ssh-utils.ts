@@ -14,7 +14,7 @@ import { DebugFunction, SFTPWrapper, SyncHostVerifier } from "ssh2";
 import { Config, NodeSSH } from "node-ssh";
 import { Logger } from "@nestjs/common";
 import { EntityManager } from "typeorm";
-import { SSHConnection } from "@pbs-manager/database-schema";
+import { SSHConnection, SSHKeypair } from "@pbs-manager/database-schema";
 
 export type KeyFormatType = PublicKeyFormatType | PrivateKeyFormatType;
 export type ParseKeyOptions = string | (Format.ReadOptions & { filename?: string });
@@ -246,23 +246,45 @@ export async function createSSHConfig(
     data: SSHConnectionData,
     debug?: DebugFunction
 ): Promise<Config> {
-    if ("host" in data && !("id" in data)) {
+    if (data == null) {
+        throw new Error("SSH connection data is null or undefined");
+    } else if ("host" in data && !("id" in data)) {
         return data;
-    } else if (!("sshConnectionId" in data)) {
-        throw new Error(`Invalid SSH connection data provided: ${JSON.stringify(data)}`);
+    } else if (!("sshConnectionId" in data) && !("id" in data)) {
+        throw new Error(`Invalid SSH connection data provided 1: ${JSON.stringify(data)}`);
     }
-    const sshConnection: SSHConnection | null =
-        data["sshKeypair"] != null && data["remoteHostKeys"] != null
-            ? (data as unknown as SSHConnection)
-            : await entityManager.findOne(SSHConnection, {
-                  where: { id: data.sshConnectionId },
-                  relations: { sshKeypair: true, remoteHostKeys: true },
-              });
-    if (!sshConnection) {
-        throw new Error(`SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
-    }
-    if (!sshConnection.sshKeypair) {
-        throw new Error(`SSH keypair for SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
+    let sshConnection: SSHConnection | null;
+    if ("sshConnectionId" in data) {
+        sshConnection = await entityManager.findOne(SSHConnection, {
+            where: { id: data.sshConnectionId },
+            relations: { sshKeypair: true, remoteHostKeys: true },
+            // lock: { mode: "pessimistic_read" }, // QueryFailedError: FOR SHARE cannot be applied to the nullable side of an outer join
+        });
+        if (!sshConnection) {
+            throw new Error(`SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
+        }
+        if (!sshConnection.sshKeypair) {
+            throw new Error(`SSH keypair for SSH connection with id ${JSON.stringify(data.sshConnectionId)} not found`);
+        }
+    } else if ("id" in data) {
+        if (data.sshKeypair == null && data.sshKeypairId != null) {
+            data.sshKeypair = await entityManager.findOne(SSHKeypair, {
+                where: { id: data.sshKeypairId },
+                lock: { mode: "pessimistic_read" },
+            });
+        }
+        if (data.sshKeypair == null) {
+            throw new Error(`SSH keypair for SSH connection with id ${JSON.stringify(data.id)} not found`);
+        }
+        if (data.remoteHostKeys == null) {
+            data.remoteHostKeys = await entityManager.find(SSHKeypair, {
+                where: { remoteHostConnections: { id: data.id } },
+                lock: { mode: "pessimistic_read" },
+            });
+        }
+        sshConnection = data;
+    } else {
+        throw new Error(`Invalid SSH connection data provided 2: ${JSON.stringify(data)}`);
     }
     // Create the config
     const config: Config = {
