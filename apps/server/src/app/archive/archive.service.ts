@@ -302,6 +302,9 @@ export class ArchiveService {
                 this.logger.verbose(
                     `Processing chunk digests from parsed indices and preparing ArchiveChunk relations for update for datastore ID ${datastoreId}`
                 );
+                // Clear the update arrays to reuse them
+                fileArchivesToUpdate.length = 0;
+                imageArchivesToUpdate.length = 0;
                 const archiveChunksToInsert: ArchiveChunk[] = [];
                 const archiveChunksToUpdate: ArchiveChunk[] = [];
                 const archiveChunksToDelete: ArchiveChunk[] = [...archiveChunks];
@@ -327,6 +330,11 @@ export class ArchiveService {
                             // );
                             // Mark the archive as having missing chunks so we can easily find and reprocess it later once the missing chunks are added to the database
                             archive.isMissingChunks = true;
+                            if (isFileArchive) {
+                                fileArchivesToUpdate.push(archive as FileArchive);
+                            } else {
+                                imageArchivesToUpdate.push(archive as ImageArchive);
+                            }
                             continue;
                         }
                         chunkCountById.set(chunkId, (chunkCountById.get(chunkId) ?? 0) + 1);
@@ -361,6 +369,14 @@ export class ArchiveService {
                             archiveChunksToInsert.push(newArchiveChunk);
                         }
                     }
+                }
+                if (fileArchivesToUpdate.length > 0 || imageArchivesToUpdate.length > 0) {
+                    this.logger.verbose(
+                        `Prepared ${fileArchivesToUpdate.length} FileArchive(s) and ${imageArchivesToUpdate.length} ImageArchive(s) for update based on chunk digest processing`
+                    );
+                    await transactionalEntityManager.save([...fileArchivesToUpdate, ...imageArchivesToUpdate], {
+                        chunk: 1000,
+                    });
                 }
                 this.logger.debug(
                     `Prepared ${archiveChunksToInsert.length} new ArchiveChunk relation(s) for insertion, ${archiveChunksToUpdate.length} existing relation(s) for update, and ${archiveChunksToDelete.length} existing relation(s) for deletion based on parsed indices for datastore ID ${datastoreId}`
