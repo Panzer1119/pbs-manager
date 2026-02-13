@@ -30,7 +30,7 @@ export class ArchiveService {
         @InjectDataSource() private readonly dataSource: DataSource,
         private readonly datastoreService: DatastoreService
     ) {
-        setTimeout(() => this.parseMissingArchiveIndexes(1, 100), 1000);
+        setTimeout(() => this.parseMissingArchiveIndexes(1, 500), 1000);
     }
 
     async parseMissingArchiveIndexes(
@@ -367,9 +367,13 @@ export class ArchiveService {
                             // Mark the archive as having missing chunks so we can easily find and reprocess it later once the missing chunks are added to the database
                             archive.isMissingChunks = true;
                             if (isFileArchive) {
-                                fileArchivesToUpdate.push(archive as FileArchive);
+                                if (!fileArchivesToUpdate.some(a => a.id === archive.id)) {
+                                    fileArchivesToUpdate.push(archive as FileArchive);
+                                }
                             } else {
-                                imageArchivesToUpdate.push(archive as ImageArchive);
+                                if (!imageArchivesToUpdate.some(a => a.id === archive.id)) {
+                                    imageArchivesToUpdate.push(archive as ImageArchive);
+                                }
                             }
                             continue;
                         }
