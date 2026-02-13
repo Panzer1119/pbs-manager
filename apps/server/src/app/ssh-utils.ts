@@ -10,7 +10,7 @@ import {
     PrivateKey,
     PrivateKeyFormatType,
 } from "sshpk";
-import { DebugFunction, SyncHostVerifier } from "ssh2";
+import { DebugFunction, SFTPWrapper, SyncHostVerifier } from "ssh2";
 import { Config, NodeSSH } from "node-ssh";
 import { Logger } from "@nestjs/common";
 import { EntityManager } from "typeorm";
@@ -316,4 +316,19 @@ export async function useSSHConnection<R>(
     } finally {
         ssh.dispose();
     }
+}
+
+export async function useSFTPConnection<R>(
+    entityManager: EntityManager,
+    connectionData: SSHConnectionData,
+    callback: (sftp: SFTPWrapper) => Promise<R> | R,
+    defaultReturnValue: R = null
+): Promise<R> {
+    return useSSHConnection(entityManager, connectionData, async (ssh: NodeSSH): Promise<Promise<R> | R> => {
+        let result: R = defaultReturnValue;
+        await ssh.withSFTP(async (sftp: SFTPWrapper): Promise<void> => {
+            result = await callback(sftp);
+        });
+        return result;
+    });
 }
