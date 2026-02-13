@@ -249,16 +249,25 @@ export function archiveToFilePath<T extends Archive>(archive: T): string {
     const snapshot: Snapshot | undefined = archive.snapshot;
     // Check if the snapshot is loaded
     if (!snapshot) {
+        if (!archive.snapshotId) {
+            throw new Error(`Archive ${archive.id} does not have a snapshotId`);
+        }
         throw new Error(`Archive ${archive.id} does not have snapshot relation loaded`);
     }
     const group: Group | undefined = snapshot.group;
     // Check if the group is loaded
     if (!group) {
+        if (!snapshot.groupId) {
+            throw new Error(`Snapshot ${snapshot.id} does not have a groupId`);
+        }
         throw new Error(`Snapshot ${snapshot.id} does not have group relation loaded`);
     }
     const datastore: Datastore | undefined = group.datastore;
     // Check if the datastore is loaded
     if (!datastore) {
+        if (!group.datastoreId) {
+            throw new Error(`Group ${group.id} does not have a datastoreId`);
+        }
         throw new Error(`Group ${group.id} does not have datastore relation loaded`);
     }
     const namespace: Namespace | undefined = group.namespace;
