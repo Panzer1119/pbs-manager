@@ -36,21 +36,32 @@ export class ArchiveService {
     async parseMissingArchiveIndexes(
         datastoreId: number,
         limit: number = 1000,
-        sshConnection?: SSHConnection
+        sshConnection?: SSHConnection,
+        includeMissingChunks: boolean = false
     ): Promise<void> {
         this.logger.log(`Starting archive index parsing for datastore ID ${datastoreId}`);
         try {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
                 // Load unparsed file archives with pessimistic locking to prevent concurrent processing
                 const fileArchives: FileArchive[] = await transactionalEntityManager.find(FileArchive, {
-                    where: { isIndexParsed: false, datastoreId },
+                    where: !includeMissingChunks
+                        ? { isIndexParsed: false, datastoreId }
+                        : [
+                              { isIndexParsed: false, datastoreId },
+                              { isMissingChunks: true, datastoreId },
+                          ],
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
                 this.logger.debug(`Found ${fileArchives.length} unparsed file archive(s)`);
                 // Load unparsed image archives with pessimistic locking to prevent concurrent processing
                 const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
-                    where: { isIndexParsed: false, datastoreId },
+                    where: !includeMissingChunks
+                        ? { isIndexParsed: false, datastoreId }
+                        : [
+                              { isIndexParsed: false, datastoreId },
+                              { isIndexParsed: true, datastoreId },
+                          ],
                     lock: { mode: "pessimistic_write" },
                     take: limit,
                 });
