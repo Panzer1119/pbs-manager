@@ -18,6 +18,7 @@ export interface ParsedData {
     snapshots: RawSnapshot[];
     fileArchives: RawFileArchive[];
     imageArchives: RawImageArchive[];
+    // catalogs: RawCatalog[]; //TODO These are the "catalog.pcat1(.didx)" files
 }
 
 export async function runFullSync(
