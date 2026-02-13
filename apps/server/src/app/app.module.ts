@@ -15,6 +15,7 @@ import { SSHModule } from "./ssh/ssh.module";
 import { SSHProcessor } from "./ssh/ssh.processor";
 import { ChunkModule } from "./chunk/chunk.module";
 import { DatastoreModule } from "./datastore/datastore.module";
+import { ArchiveModule } from "./archive/archive.module";
 import pushoverConfig from "./config/pushover.config";
 
 @Module({
@@ -46,6 +47,7 @@ import pushoverConfig from "./config/pushover.config";
         BullModule.registerQueue({ name: SSHProcessor.QUEUE_NAME }),
         ChunkModule,
         DatastoreModule,
+        ArchiveModule,
     ],
     controllers: [AppController],
     providers: [AppService],
