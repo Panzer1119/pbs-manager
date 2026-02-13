@@ -1,18 +1,22 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In } from "typeorm";
-import { Datastore, FileArchive, Group, Namespace, Snapshot } from "@pbs-manager/database-schema";
+import { Datastore, FileArchive, Group, Namespace, Snapshot, SSHConnection } from "@pbs-manager/database-schema";
 import { archiveToFilePath } from "@pbs-manager/data-sync";
+import { DatastoreService } from "../datastore/datastore.service";
 
 @Injectable()
 export class ArchiveService {
     private readonly logger: Logger = new Logger(ArchiveService.name);
 
-    constructor(@InjectDataSource() private readonly dataSource: DataSource) {
+    constructor(
+        @InjectDataSource() private readonly dataSource: DataSource,
+        private readonly datastoreService: DatastoreService
+    ) {
         setTimeout(() => this.parseMissingArchiveIndexes(1), 1000);
     }
 
-    async parseMissingArchiveIndexes(datastoreId: number): Promise<void> {
+    async parseMissingArchiveIndexes(datastoreId: number, sshConnection?: SSHConnection): Promise<void> {
         this.logger.log(`Starting archive index parsing for datastore ID ${datastoreId}`);
         try {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
@@ -65,7 +69,20 @@ export class ArchiveService {
                 const fileArchivePaths: string[] = fileArchives.map(archive =>
                     archiveToFilePath(archive, datastoreMap, namespaceMap, groupMap, snapshotMap)
                 );
-                this.logger.debug(fileArchivePaths);
+                this.logger.debug(fileArchivePaths); //TODO Remove this debug log after testing
+                if (!sshConnection) {
+                    this.logger.verbose(
+                        `No SSH connection provided, attempting to load active connection for datastore ID ${datastoreId}`
+                    );
+                    sshConnection = await this.datastoreService.getActiveSSHConnection(datastoreId);
+                    if (!sshConnection) {
+                        this.logger.error(`No active SSH connection found for datastore ID ${datastoreId}`);
+                        return;
+                    }
+                    this.logger.verbose(
+                        `Loaded active SSH connection with ID ${sshConnection.id} for datastore ID ${datastoreId}`
+                    );
+                }
                 //TODO
             });
             this.logger.log(`Completed archive index parsing for datastore ID ${datastoreId}`);
