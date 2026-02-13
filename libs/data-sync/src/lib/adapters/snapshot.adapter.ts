@@ -7,6 +7,7 @@ import { GroupAdapter } from "./group.adapter";
 export interface RawSnapshot {
     groupKey: string;
     timestamp: Date;
+    protected?: boolean;
 }
 
 export class SnapshotAdapter implements ReconcileAdapter<Snapshot, RawSnapshot> {
