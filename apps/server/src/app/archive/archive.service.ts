@@ -2,6 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In } from "typeorm";
 import {
+    ArchiveChunk,
+    Chunk,
     Datastore,
     FileArchive,
     Group,
@@ -25,7 +27,11 @@ export class ArchiveService {
         setTimeout(() => this.parseMissingArchiveIndexes(1), 1000);
     }
 
-    async parseMissingArchiveIndexes(datastoreId: number, sshConnection?: SSHConnection): Promise<void> {
+    async parseMissingArchiveIndexes(
+        datastoreId: number,
+        limit: number = 1000,
+        sshConnection?: SSHConnection
+    ): Promise<void> {
         this.logger.log(`Starting archive index parsing for datastore ID ${datastoreId}`);
         try {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
@@ -33,14 +39,14 @@ export class ArchiveService {
                 const fileArchives: FileArchive[] = await transactionalEntityManager.find(FileArchive, {
                     where: { indexParsed: false, datastoreId },
                     lock: { mode: "pessimistic_write" },
-                    take: 10, //TODO Remove this limit after testing
+                    take: limit,
                 });
                 this.logger.debug(`Found ${fileArchives.length} unparsed file archive(s)`);
                 // Load unparsed image archives with pessimistic locking to prevent concurrent processing
                 const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
                     where: { indexParsed: false, datastoreId },
                     lock: { mode: "pessimistic_write" },
-                    take: 10, //TODO Remove this limit after testing
+                    take: limit,
                 });
                 this.logger.debug(`Found ${imageArchives.length} unparsed image archive(s)`);
                 // Load snapshots related to the file archives with pessimistic locking
@@ -125,7 +131,66 @@ export class ArchiveService {
                 this.logger.verbose(
                     `Parsed ${dynamic.length} dynamic index entry(ies) and ${fixed.length} fixed index entry(ies) for datastore ID ${datastoreId}`
                 );
+                // Collect Chunk digests from the parsed indices for later processing (e.g., linking to Archives)
+                const chunkDigests: Set<string> = new Set();
+                for (const dynamicIndex of dynamic) {
+                    if (dynamicIndex.digests) {
+                        for (const digest of dynamicIndex.digests) {
+                            chunkDigests.add(digest);
+                        }
+                    }
+                }
+                for (const fixedIndex of fixed) {
+                    if (fixedIndex.digests) {
+                        for (const digest of fixedIndex.digests) {
+                            chunkDigests.add(digest);
+                        }
+                    }
+                }
+                // Load existing Chunks based on the collected digests with pessimistic locking to prevent concurrent processing
+                this.logger.verbose(
+                    `Loading existing chunk ids for ${chunkDigests.size} unique digest(s) for datastore ID ${datastoreId}`
+                );
+                const chunks: { id: number; hash_sha256: string }[] = await transactionalEntityManager
+                    .createQueryBuilder(Chunk, "chunk")
+                    .select(["id", "hash_sha256"])
+                    .where("datastore_id = :datastoreId", { datastoreId })
+                    .andWhere("hash_sha256 IN (:...digests)", { digests: Array.from(chunkDigests) }) //FIXME What if there are too many digests to load at once?
+                    .setLock("pessimistic_read")
+                    .getRawMany();
+                const chunkIdByDigest: Map<string, number> = new Map(
+                    chunks.map(chunk => [chunk.hash_sha256, chunk.id])
+                );
+                this.logger.verbose(
+                    `Loaded ${chunks.length} existing chunk id(s) based on parsed indices for datastore ID ${datastoreId}`
+                );
+                // Collect Archive IDs
+                const archiveIds: Set<number> = new Set([
+                    ...fileArchives.map(archive => archive.id),
+                    ...imageArchives.map(archive => archive.id),
+                ]);
+                // Load existing ArchiveChunks
+                this.logger.verbose(
+                    `Loading existing archive-chunk relations for ${archiveIds.size} unique archive ID(s) for datastore ID ${datastoreId}`
+                );
+                const archiveChunks: ArchiveChunk[] = await transactionalEntityManager.find(ArchiveChunk, {
+                    where: { archiveId: In(Array.from(archiveIds)) },
+                    lock: { mode: "pessimistic_write" },
+                });
+                const archiveChunksByArchiveId: Map<number, ArchiveChunk[]> = new Map();
+                for (const archiveChunk of archiveChunks) {
+                    if (!archiveChunksByArchiveId.has(archiveChunk.archiveId)) {
+                        archiveChunksByArchiveId.set(archiveChunk.archiveId, []);
+                    }
+                    archiveChunksByArchiveId.get(archiveChunk.archiveId).push(archiveChunk);
+                }
+                this.logger.verbose(
+                    `Loaded ${archiveChunks.length} existing archive-chunk relation(s) for datastore ID ${datastoreId}`
+                );
                 // Process dynamic indices and update corresponding FileArchives as needed
+                this.logger.verbose(
+                    `Processing dynamic indices and preparing FileArchives for update for datastore ID ${datastoreId}`
+                );
                 const fileArchivesToUpdate: FileArchive[] = [];
                 for (const dynamicIndex of dynamic) {
                     const fileArchive: FileArchive | undefined = fileArchiveByPath.get(dynamicIndex.path);
@@ -155,12 +220,14 @@ export class ArchiveService {
                     if (hasChanges) {
                         fileArchivesToUpdate.push(fileArchive);
                     }
-                    //TODO Process digests (link Chunks to Archives)
                 }
                 this.logger.debug(
                     `Prepared ${fileArchivesToUpdate.length} FileArchive(s) for update based on dynamic indices`
                 );
                 // Process fixed indices as needed and update corresponding ImageArchives as needed
+                this.logger.verbose(
+                    `Processing fixed indices and preparing ImageArchives for update for datastore ID ${datastoreId}`
+                );
                 const imageArchivesToUpdate: ImageArchive[] = [];
                 for (const fixedIndex of fixed) {
                     const imageArchive: ImageArchive | undefined = imageArchiveByPath.get(fixedIndex.path);
@@ -198,12 +265,83 @@ export class ArchiveService {
                     if (hasChanges) {
                         imageArchivesToUpdate.push(imageArchive);
                     }
-                    //TODO Process digests (link Chunks to Archives)
                 }
                 this.logger.debug(
                     `Prepared ${imageArchivesToUpdate.length} ImageArchive(s) for update based on fixed indices`
                 );
                 await transactionalEntityManager.save([...fileArchivesToUpdate, ...imageArchivesToUpdate]);
+                // Process digests from dynamic and fixed indices and create ArchiveChunk relations as needed
+                this.logger.verbose(
+                    `Processing chunk digests from parsed indices and preparing ArchiveChunk relations for update for datastore ID ${datastoreId}`
+                );
+                const archiveChunksToInsert: ArchiveChunk[] = [];
+                const archiveChunksToUpdate: ArchiveChunk[] = [];
+                const archiveChunksToDelete: ArchiveChunk[] = [...archiveChunks];
+                for (const index of [...dynamic, ...fixed]) {
+                    if (!index.digests) {
+                        continue;
+                    }
+                    // Process digests and count occurrences for the current index
+                    const chunkCountById: Map<number, number> = new Map();
+                    for (const digest of index.digests) {
+                        const chunkId: number | undefined = chunkIdByDigest.get(digest);
+                        if (!chunkId) {
+                            //TODO What about the digests that don't have matching Chunks in the database?
+                            // Should we create new Chunk entries for them?
+                            // For now, we just skip linking those digests to the archive.
+                            this.logger.warn(
+                                `No matching Chunk found for digest ${digest} in index path ${index.path}, skipping relation`
+                            );
+                            continue;
+                        }
+                        chunkCountById.set(chunkId, (chunkCountById.get(chunkId) ?? 0) + 1);
+                    }
+                    const isFileArchive: boolean = fileArchiveByPath.has(index.path);
+                    const archive: FileArchive | ImageArchive | undefined = isFileArchive
+                        ? fileArchiveByPath.get(index.path)
+                        : imageArchiveByPath.get(index.path);
+                    const archiveId: number = archive.id;
+                    const existingArchiveChunks: ArchiveChunk[] = archiveChunksByArchiveId.get(archiveId) ?? [];
+                    for (const [chunkId, count] of chunkCountById.entries()) {
+                        const existingArchiveChunk: ArchiveChunk | undefined = existingArchiveChunks.find(
+                            ac => ac.chunkId === chunkId
+                        );
+                        if (existingArchiveChunk) {
+                            if (existingArchiveChunk.count !== count) {
+                                // If the count has changed, we need to update the existing relation
+                                existingArchiveChunk.count = count;
+                                archiveChunksToUpdate.push(existingArchiveChunk);
+                            }
+                            // Since this relation is still valid, we remove it from the delete list
+                            const deleteIndex: number = archiveChunksToDelete.findIndex(
+                                ac =>
+                                    ac.archiveId === existingArchiveChunk.archiveId &&
+                                    ac.chunkId === existingArchiveChunk.chunkId
+                            );
+                            if (deleteIndex !== -1) {
+                                archiveChunksToDelete.splice(deleteIndex, 1);
+                            }
+                        } else if (!existingArchiveChunk) {
+                            // If the relation doesn't exist, we need to create a new one
+                            const newArchiveChunk: ArchiveChunk = transactionalEntityManager.create(ArchiveChunk, {
+                                archiveId,
+                                chunkId,
+                                count,
+                            });
+                            archiveChunksToInsert.push(newArchiveChunk);
+                        }
+                    }
+                }
+                this.logger.debug(
+                    `Prepared ${archiveChunksToInsert.length} new ArchiveChunk relation(s) for insertion, ${archiveChunksToUpdate.length} existing relation(s) for update, and ${archiveChunksToDelete.length} existing relation(s) for deletion based on parsed indices for datastore ID ${datastoreId}`
+                );
+                await transactionalEntityManager.save(ArchiveChunk, archiveChunksToInsert, { chunk: 1000 });
+                // await transactionalEntityManager.insert(ArchiveChunk, archiveChunksToInsert);
+                await transactionalEntityManager.upsert(ArchiveChunk, archiveChunksToUpdate, {
+                    conflictPaths: ["archiveId", "chunkId"],
+                    upsertType: "on-conflict-do-update",
+                });
+                await transactionalEntityManager.remove(ArchiveChunk, archiveChunksToDelete, { chunk: 1000 });
             });
             this.logger.log(`Completed archive index parsing for datastore ID ${datastoreId}`);
         } catch (error) {
