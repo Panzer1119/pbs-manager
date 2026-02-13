@@ -1,18 +1,14 @@
 import { Key, ReconcileAdapter } from "../engine/adapter";
 import { EntityManager, EntityTarget, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { makeKey } from "../engine/key";
-import { ArchiveType, ImageArchive, Group, Snapshot } from "@pbs-manager/database-schema";
+import { ArchiveType, Group, ImageArchive, Snapshot } from "@pbs-manager/database-schema";
 import { SnapshotAdapter } from "./snapshot.adapter";
 import { GroupAdapter } from "./group.adapter";
+import { FixedIndex } from "../parser/index.parser";
 
-export interface RawImageArchive {
+export interface RawImageArchive extends Partial<FixedIndex> {
     snapshotKey: string;
     name: string;
-    uuid?: string;
-    creation?: Date;
-    indexHashSHA256?: string;
-    sizeBytes?: number;
-    chunkSizeBytes?: number;
 }
 
 export class ImageArchiveAdapter implements ReconcileAdapter<ImageArchive, RawImageArchive> {
@@ -76,7 +72,7 @@ export class ImageArchiveAdapter implements ReconcileAdapter<ImageArchive, RawIm
             name: raw.name,
             uuid: raw.uuid,
             creation: raw.creation,
-            indexHashSHA256: raw.indexHashSHA256,
+            indexHashSHA256: raw.checksum,
         };
     }
 
@@ -112,8 +108,8 @@ export class ImageArchiveAdapter implements ReconcileAdapter<ImageArchive, RawIm
             entity.creation = raw.creation;
             hasChanges = true;
         }
-        if (entity.indexHashSHA256 !== raw.indexHashSHA256 && raw.indexHashSHA256 !== undefined) {
-            entity.indexHashSHA256 = raw.indexHashSHA256;
+        if (entity.indexHashSHA256 !== raw.checksum && raw.checksum !== undefined) {
+            entity.indexHashSHA256 = raw.checksum;
             hasChanges = true;
         }
         if (entity.sizeBytes !== raw.sizeBytes && raw.sizeBytes !== undefined) {

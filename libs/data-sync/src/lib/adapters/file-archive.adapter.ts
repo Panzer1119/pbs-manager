@@ -4,13 +4,11 @@ import { makeKey } from "../engine/key";
 import { ArchiveType, FileArchive, Group, Snapshot } from "@pbs-manager/database-schema";
 import { SnapshotAdapter } from "./snapshot.adapter";
 import { GroupAdapter } from "./group.adapter";
+import { DynamicIndex } from "../parser/index.parser";
 
-export interface RawFileArchive {
+export interface RawFileArchive extends Partial<DynamicIndex> {
     snapshotKey: string;
     name: string;
-    uuid?: string;
-    creation?: Date;
-    indexHashSHA256?: string;
 }
 
 export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFileArchive> {
@@ -74,7 +72,7 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
             name: raw.name,
             uuid: raw.uuid,
             creation: raw.creation,
-            indexHashSHA256: raw.indexHashSHA256,
+            indexHashSHA256: raw.checksum,
         };
     }
 
@@ -111,8 +109,8 @@ export class FileArchiveAdapter implements ReconcileAdapter<FileArchive, RawFile
             entity.creation = raw.creation;
             hasChanges = true;
         }
-        if (entity.indexHashSHA256 !== raw.indexHashSHA256 && raw.indexHashSHA256 !== undefined) {
-            entity.indexHashSHA256 = raw.indexHashSHA256;
+        if (entity.indexHashSHA256 !== raw.checksum && raw.checksum !== undefined) {
+            entity.indexHashSHA256 = raw.checksum;
             hasChanges = true;
         }
         if (hasChanges) {
