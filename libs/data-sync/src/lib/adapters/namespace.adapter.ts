@@ -27,8 +27,9 @@ export class NamespaceAdapter implements ReconcileAdapter<Namespace, RawNamespac
     async load(entityManager: EntityManager): Promise<Namespace[]> {
         return entityManager.find(Namespace, {
             where: { datastoreId: this.datastoreId },
+            relations: { parent: true },
             withDeleted: true,
-            lock: { mode: "pessimistic_write" },
+            // lock: { mode: "pessimistic_write" }, // QueryFailedError: FOR UPDATE cannot be applied to the nullable side of an outer join
         });
     }
 
