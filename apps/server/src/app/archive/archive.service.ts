@@ -1,7 +1,15 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
 import { DataSource, EntityManager, In } from "typeorm";
-import { Datastore, FileArchive, Group, Namespace, Snapshot, SSHConnection } from "@pbs-manager/database-schema";
+import {
+    Datastore,
+    FileArchive,
+    Group,
+    ImageArchive,
+    Namespace,
+    Snapshot,
+    SSHConnection,
+} from "@pbs-manager/database-schema";
 import { archiveToFilePath } from "@pbs-manager/data-sync";
 import { DatastoreService } from "../datastore/datastore.service";
 
@@ -27,8 +35,18 @@ export class ArchiveService {
                     take: 10, //TODO Remove this limit after testing
                 });
                 this.logger.debug(`Found ${fileArchives.length} unparsed file archive(s)`);
+                // Load unparsed image archives with pessimistic locking to prevent concurrent processing
+                const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
+                    where: { indexParsed: false, datastoreId },
+                    lock: { mode: "pessimistic_write" },
+                    take: 10, //TODO Remove this limit after testing
+                });
+                this.logger.debug(`Found ${imageArchives.length} unparsed image archive(s)`);
                 // Load snapshots related to the file archives with pessimistic locking
-                const snapshotIds: Set<number> = new Set(fileArchives.map(archive => archive.snapshotId));
+                const snapshotIds: Set<number> = new Set([
+                    ...fileArchives.map(archive => archive.snapshotId),
+                    ...imageArchives.map(archive => archive.snapshotId),
+                ]);
                 const snapshots: Snapshot[] = await transactionalEntityManager.find(Snapshot, {
                     where: { id: In(Array.from(snapshotIds)) },
                     lock: { mode: "pessimistic_read" },
@@ -66,7 +84,7 @@ export class ArchiveService {
                 );
                 this.logger.verbose(`Loaded ${datastores.length} datastore(s) for archive parsing`);
                 // Build file paths for the archives based on the loaded data
-                const fileArchivePaths: string[] = fileArchives.map(archive =>
+                const fileArchivePaths: string[] = [...fileArchives, ...imageArchives].map(archive =>
                     archiveToFilePath(archive, datastoreMap, namespaceMap, groupMap, snapshotMap)
                 );
                 this.logger.debug(fileArchivePaths); //TODO Remove this debug log after testing
