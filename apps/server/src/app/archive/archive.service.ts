@@ -183,6 +183,14 @@ export class ArchiveService {
                         imageArchive.indexHashSHA256 = fixedIndex.checksum ?? null;
                         hasChanges = true;
                     }
+                    if (imageArchive.sizeBytes !== fixedIndex.sizeBytes) {
+                        imageArchive.sizeBytes = fixedIndex.sizeBytes ?? null;
+                        hasChanges = true;
+                    }
+                    if (imageArchive.chunkSizeBytes !== fixedIndex.chunkSizeBytes) {
+                        imageArchive.chunkSizeBytes = fixedIndex.chunkSizeBytes ?? null;
+                        hasChanges = true;
+                    }
                     if (!imageArchive.indexParsed) {
                         imageArchive.indexParsed = true;
                         hasChanges = true;
