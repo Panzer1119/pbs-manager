@@ -49,6 +49,12 @@ export class ArchiveService {
                     take: limit,
                 });
                 this.logger.debug(`Found ${imageArchives.length} unparsed image archive(s)`);
+                if (fileArchives.length === 0 && imageArchives.length === 0) {
+                    this.logger.log(
+                        `No unparsed archives found for datastore ID ${datastoreId}, skipping index parsing`
+                    );
+                    return;
+                }
                 // Load snapshots related to the file archives with pessimistic locking
                 const snapshotIds: Set<number> = new Set([
                     ...fileArchives.map(archive => archive.snapshotId),
