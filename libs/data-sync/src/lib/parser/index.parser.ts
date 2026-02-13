@@ -26,7 +26,7 @@ export interface BaseIndex {
     uuid: string;
     creation: Date;
     checksum: string;
-    headerSizeBytes: number;
+    bodyOffset: number;
     digests: string[];
 }
 
@@ -255,7 +255,7 @@ function parseFixedIndex(header: BaseIndex, data: Buffer): FixedIndex {
     // Read the chunk size (64 bits unsigned little-endian)
     const chunkSizeBytes: bigint = data.readBigUInt64LE(72);
     // Read the digests (everything after 4096 bytes)
-    const digests: string[] = parseDigestsBuffer(data.subarray(header.headerSizeBytes));
+    const digests: string[] = parseDigestsBuffer(data.subarray(header.bodyOffset));
     return {
         ...header,
         magicNumberHex: MAGIC_NUMBER_HEX_FIXED_INDEX,
@@ -268,7 +268,7 @@ function parseFixedIndex(header: BaseIndex, data: Buffer): FixedIndex {
 function parseDynamicIndex(header: BaseIndex, data: Buffer): DynamicIndex {
     // Read the offsets and digests (everything after 4096 bytes)
     const offsetsAndDigests: { offset: bigint; digest: string }[] = parseOffsetsAndDigestsBuffer(
-        data.subarray(header.headerSizeBytes)
+        data.subarray(header.bodyOffset)
     );
     return {
         ...header,
@@ -294,7 +294,7 @@ export function parseIndex(data: Buffer, path?: string): Index {
         uuid: hexToUUID(uuidHex),
         creation: new Date(Number(creationTimeEpochSeconds) * 1000),
         checksum: checksumHex,
-        headerSizeBytes: 4096,
+        bodyOffset: 4096,
         digests: [],
     };
     // Check if the magic number is the fixed index magic number
