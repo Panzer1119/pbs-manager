@@ -9,13 +9,7 @@ export class ArchiveService {
     private readonly logger: Logger = new Logger(ArchiveService.name);
 
     constructor(@InjectDataSource() private readonly dataSource: DataSource) {
-        setTimeout(
-            () =>
-                this.parseMissingArchiveIndexes(1)
-                    .then(() => this.logger.log("Initial archive index parsing completed"))
-                    .catch(error => this.logger.error("Error during initial archive index parsing", error)),
-            1000
-        );
+        setTimeout(() => this.parseMissingArchiveIndexes(1), 1000);
     }
 
     async parseMissingArchiveIndexes(datastoreId: number): Promise<void> {
