@@ -4,6 +4,66 @@ import { GroupAdapter, RawGroup } from "../adapters/group.adapter";
 import { Key } from "../engine/adapter";
 import { RawSnapshot, SnapshotAdapter } from "../adapters/snapshot.adapter";
 
+export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED = "42ab3807be8370a1";
+export type MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED = "31b958426fb6a37f";
+export type MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_UNCOMPRESSED = "7b6785be222d4cf0";
+export type MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_COMPRESSED = "e6591bbf0bbfd80b";
+export type MAGIC_NUMBER_HEX_DYNAMIC_INDEX = "1c914ea519bab3cd";
+export type MAGIC_NUMBER_HEX_FIXED_INDEX = "2f7f41ed91fd0fcd";
+
+export type FILE_EXTENSION_PROXMOX_FILE_ARCHIVE = "pxar";
+export type FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_META = "mpxar";
+export type FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_PAYLOAD = "ppxar";
+export type FILE_EXTENSION_DATA_BLOB = "blob";
+export type FILE_EXTENSION_FIXED_INDEX = "fidx";
+export type FILE_EXTENSION_DYNAMIC_INDEX = "didx";
+
+export type Index = DynamicIndex | FixedIndex;
+
+export interface BaseIndex {
+    path?: string;
+    magicNumberHex: string;
+    uuid: string;
+    creation: Date;
+    checksum: string;
+    headerSizeBytes: number;
+    digests: string[];
+}
+
+export interface DynamicIndex extends BaseIndex {
+    magicNumberHex: MAGIC_NUMBER_HEX_DYNAMIC_INDEX;
+    offsets: number[];
+}
+
+export interface FixedIndex extends BaseIndex {
+    magicNumberHex: MAGIC_NUMBER_HEX_FIXED_INDEX;
+    sizeBytes: number;
+    chunkSizeBytes: number;
+}
+
+export interface Indices {
+    dynamic: DynamicIndex[];
+    fixed: FixedIndex[];
+}
+
+export const MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_UNCOMPRESSED =
+    "42ab3807be8370a1";
+export const MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_UNENCRYPTED_COMPRESSED =
+    "31b958426fb6a37f";
+export const MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_UNCOMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_UNCOMPRESSED =
+    "7b6785be222d4cf0";
+export const MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_COMPRESSED: MAGIC_NUMBER_HEX_DATA_BLOB_ENCRYPTED_COMPRESSED =
+    "e6591bbf0bbfd80b";
+export const MAGIC_NUMBER_HEX_DYNAMIC_INDEX: MAGIC_NUMBER_HEX_DYNAMIC_INDEX = "1c914ea519bab3cd";
+export const MAGIC_NUMBER_HEX_FIXED_INDEX: MAGIC_NUMBER_HEX_FIXED_INDEX = "2f7f41ed91fd0fcd";
+
+export const FILE_EXTENSION_PROXMOX_FILE_ARCHIVE: FILE_EXTENSION_PROXMOX_FILE_ARCHIVE = "pxar";
+export const FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_META: FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_META = "mpxar";
+export const FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_PAYLOAD: FILE_EXTENSION_PROXMOX_FILE_ARCHIVE_PAYLOAD = "ppxar";
+export const FILE_EXTENSION_DATA_BLOB: FILE_EXTENSION_DATA_BLOB = "blob";
+export const FILE_EXTENSION_DYNAMIC_INDEX: FILE_EXTENSION_DYNAMIC_INDEX = "didx";
+export const FILE_EXTENSION_FIXED_INDEX: FILE_EXTENSION_FIXED_INDEX = "fidx";
+
 export const REG_EXP_INDEX_FILE_PATH: RegExp =
     /^(?<datastoreMountpoint>.+?\/(?<datastoreName>[^/]+))\/(?:\.zfs\/snapshot\/(?<snapshot>[^/]+)+\/)?(?<namespace>(?:ns\/[^/]+\/)*)(?<type>vm|ct|host)\/(?<id>[^/]+)\/(?<timestamp>\d+-\d\d-\d\dT\d\d:\d\d:\d\dZ)\/(?<name>[^/]+)\.(?<extension>[^./]+)$/m;
 
@@ -138,4 +198,113 @@ export function parseIndexFilePaths(hostId: number, filePaths: string[]): Parsed
         }
     }
     return parsedData;
+}
+
+// Parsing Binary Functions
+
+// // Parsing Binary Utils
+
+function sliceToHex(data: Buffer, byteCount: number, offset = 0): string {
+    if (data.length < offset + byteCount) {
+        throw new Error(`Data length ${data.length} is less than expected byte count ${byteCount} at offset ${offset}`);
+    }
+    return data.subarray(offset, offset + byteCount).toString("hex");
+}
+
+function parseDigestsBuffer(data: Buffer): string[] {
+    if (data.length % 32 !== 0) {
+        throw new Error(`Buffer length ${data.length} is not a multiple of 32`);
+    }
+    const digests: string[] = [];
+    // Iterate over every 32 bytes
+    for (let i = 0; i < data.length; i += 32) {
+        // Read 32 bytes as hex
+        digests.push(sliceToHex(data, 32, i));
+    }
+    return digests;
+}
+
+function parseOffsetsAndDigestsBuffer(data: Buffer): { offset: bigint; digest: string }[] {
+    if (data.length % 40 !== 0) {
+        throw new Error(`Buffer length ${data.length} is not a multiple of 40`);
+    }
+    const result: { offset: bigint; digest: string }[] = [];
+    // Iterate over every 40 bytes
+    for (let i = 0; i < data.length; i += 40) {
+        // Read 8 bytes as an unsigned little-endian bigint
+        const offset: bigint = data.readBigUInt64LE(i);
+        // Read next 32 bytes as hex
+        const digest: string = sliceToHex(data, 32, i + 8);
+        result.push({ offset, digest });
+    }
+    return result;
+}
+
+function hexToUUID(hex: string): string {
+    if (hex.length !== 32) {
+        throw new Error(`Expected 32 hex characters, got ${hex.length}`);
+    }
+    return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)].join("-");
+}
+
+// // Parsing Index Functions
+
+function parseFixedIndex(header: BaseIndex, data: Buffer): FixedIndex {
+    // Read the size (64 bits unsigned little-endian)
+    const sizeBytes: bigint = data.readBigUInt64LE(64);
+    // Read the chunk size (64 bits unsigned little-endian)
+    const chunkSizeBytes: bigint = data.readBigUInt64LE(72);
+    // Read the digests (everything after 4096 bytes)
+    const digests: string[] = parseDigestsBuffer(data.subarray(header.headerSizeBytes));
+    return {
+        ...header,
+        magicNumberHex: MAGIC_NUMBER_HEX_FIXED_INDEX,
+        sizeBytes: Number(sizeBytes),
+        chunkSizeBytes: Number(chunkSizeBytes),
+        digests,
+    };
+}
+
+function parseDynamicIndex(header: BaseIndex, data: Buffer): DynamicIndex {
+    // Read the offsets and digests (everything after 4096 bytes)
+    const offsetsAndDigests: { offset: bigint; digest: string }[] = parseOffsetsAndDigestsBuffer(
+        data.subarray(header.headerSizeBytes)
+    );
+    return {
+        ...header,
+        magicNumberHex: MAGIC_NUMBER_HEX_DYNAMIC_INDEX,
+        digests: offsetsAndDigests.map(e => e.digest),
+        offsets: offsetsAndDigests.map(e => Number(e.offset)),
+    };
+}
+
+export function parseIndex(data: Buffer, path?: string): Index {
+    // Read the magic number code (8 bytes)
+    const magicNumberHex: string = sliceToHex(data, 8);
+    // Read the uuid (16 bytes)
+    const uuidHex: string = sliceToHex(data, 16, 8);
+    // Read the creation time (epoch) (64 bits signed little-endian)
+    const creationTimeEpochSeconds: bigint = data.readBigInt64LE(24);
+    // Read the checksum (32 bytes)
+    const checksumHex: string = sliceToHex(data, 32, 32);
+    // Build the header
+    const header: BaseIndex = {
+        path,
+        magicNumberHex,
+        uuid: hexToUUID(uuidHex),
+        creation: new Date(Number(creationTimeEpochSeconds) * 1000),
+        checksum: checksumHex,
+        headerSizeBytes: 4096,
+        digests: [],
+    };
+    // Check if the magic number is the fixed index magic number
+    if (magicNumberHex === MAGIC_NUMBER_HEX_FIXED_INDEX) {
+        return parseFixedIndex(header, data);
+    }
+    // Check if the magic number is the dynamic index magic number
+    if (magicNumberHex === MAGIC_NUMBER_HEX_DYNAMIC_INDEX) {
+        return parseDynamicIndex(header, data);
+    }
+    // Throw an error if the magic number is unknown
+    throw new Error(`Unknown magic number: ${magicNumberHex}`);
 }
