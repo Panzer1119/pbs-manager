@@ -241,6 +241,8 @@ export class ArchiveService {
                     }
                     if (!fileArchive.isIndexParsed) {
                         fileArchive.isIndexParsed = true;
+                        // Default to not having missing chunks when we have a parsed index
+                        fileArchive.isMissingChunks = false;
                         hasChanges = true;
                     }
                     if (hasChanges) {
@@ -286,6 +288,8 @@ export class ArchiveService {
                     }
                     if (!imageArchive.isIndexParsed) {
                         imageArchive.isIndexParsed = true;
+                        // Default to not having missing chunks when we have a parsed index
+                        imageArchive.isMissingChunks = false;
                         hasChanges = true;
                     }
                     if (hasChanges) {
