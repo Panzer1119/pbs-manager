@@ -30,7 +30,7 @@ export class ArchiveService {
         @InjectDataSource() private readonly dataSource: DataSource,
         private readonly datastoreService: DatastoreService
     ) {
-        setTimeout(() => this.parseMissingArchiveIndexes(1, 500), 1000);
+        setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 1000);
     }
 
     async parseMissingArchiveIndexes(
