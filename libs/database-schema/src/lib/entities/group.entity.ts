@@ -4,6 +4,7 @@ import { Datastore } from "./datastore.entity";
 import { Namespace } from "./namespace.entity";
 import { BackupType } from "../types/backup.type";
 import { Snapshot } from "./snapshot.entity";
+import { StatisticsEmbedding } from "../embeddings/statistics.embedding";
 
 @Entity()
 // Namespace, Type, Backup ID
@@ -39,6 +40,9 @@ export class Group {
     @Index()
     @Column({ length: 255 })
     backupId!: string;
+
+    @Column(() => StatisticsEmbedding)
+    statistics!: StatisticsEmbedding;
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;

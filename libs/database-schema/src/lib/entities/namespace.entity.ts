@@ -13,6 +13,7 @@ import {
 import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Datastore } from "./datastore.entity";
 import { Group } from "./group.entity";
+import { StatisticsEmbedding } from "../embeddings/statistics.embedding";
 
 @Entity()
 @Tree("closure-table")
@@ -48,6 +49,9 @@ export class Namespace {
     @Index()
     @Column({ length: 4095, nullable: true })
     path?: string;
+
+    @Column(() => StatisticsEmbedding)
+    statistics!: StatisticsEmbedding;
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;

@@ -13,6 +13,7 @@ import { ArchiveType } from "../types/archive.type";
 import { Snapshot } from "./snapshot.entity";
 import { ArchiveChunk } from "./archive-chunk.entity";
 import { Datastore } from "./datastore.entity";
+import { StatisticsEmbedding } from "../embeddings/statistics.embedding";
 
 @Entity()
 @Index(["snapshot", "type", "name"], { unique: true })
@@ -65,6 +66,9 @@ export class Archive {
 
     @Column({ length: 64, nullable: true })
     indexHashSHA256?: string;
+
+    @Column(() => StatisticsEmbedding)
+    statistics!: StatisticsEmbedding;
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;

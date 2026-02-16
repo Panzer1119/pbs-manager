@@ -3,6 +3,7 @@ import { MetadataEmbedding } from "../embeddings/metadata.embedding";
 import { Group } from "./group.entity";
 import { Archive } from "./archive.entity";
 import { Datastore } from "./datastore.entity";
+import { StatisticsEmbedding } from "../embeddings/statistics.embedding";
 
 @Entity()
 @Index(["group", "time"], { unique: true })
@@ -36,6 +37,9 @@ export class Snapshot {
 
     @Column({ nullable: true })
     protected?: boolean;
+
+    @Column(() => StatisticsEmbedding)
+    statistics!: StatisticsEmbedding;
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;

@@ -16,7 +16,7 @@ export class StatisticsEmbedding {
         update: false,
         generatedType: "STORED",
         asExpression:
-            "CASE WHEN logical_size_bytes > 0 THEN (logical_size_bytes::double precision / unique_size_bytes) ELSE NULL END",
+            "CASE WHEN statistics_logical_size_bytes > 0 THEN (statistics_logical_size_bytes::double precision / statistics_unique_size_bytes) ELSE NULL END",
     })
     deduplicationRatio?: number;
 }

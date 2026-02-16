@@ -6,6 +6,7 @@ import { Group } from "./group.entity";
 import { Snapshot } from "./snapshot.entity";
 import { Archive } from "./archive.entity";
 import { Chunk } from "./chunk.entity";
+import { StatisticsEmbedding } from "../embeddings/statistics.embedding";
 
 @Entity()
 @Index(["host", "name"], { unique: true })
@@ -27,6 +28,9 @@ export class Datastore {
 
     @Column({ length: 255, nullable: true })
     mountpoint?: string;
+
+    @Column(() => StatisticsEmbedding)
+    statistics!: StatisticsEmbedding;
 
     @Column(() => MetadataEmbedding)
     metadata!: MetadataEmbedding;
