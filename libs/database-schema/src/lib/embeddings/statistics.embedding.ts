@@ -3,6 +3,10 @@ import { BigIntTransformer } from "../transformers/bigint.transformer";
 
 export class StatisticsEmbedding {
     @Index()
+    @Column({ type: "timestamptz", nullable: true })
+    calculatedAt?: Date;
+
+    @Index()
     @Column("bigint", { nullable: true, transformer: new BigIntTransformer() })
     uniqueSizeBytes?: number;
 

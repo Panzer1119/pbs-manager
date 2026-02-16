@@ -14,3 +14,4 @@ export * from "./migrations/1771002026597-AddProtectedToSnapshot";
 export * from "./migrations/1771014699700-AddIsMissingChunksToArchive";
 export * from "./migrations/1771014769922-RenameIndexParsedOfArchiveToIsIndexParsed";
 export * from "./migrations/1771282980337-AddStatisticsToMultipleTables";
+export * from "./migrations/1771283634348-AddStatisticsCalculatedAtToMultipleTables";
