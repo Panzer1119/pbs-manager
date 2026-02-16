@@ -23,7 +23,8 @@ import {
 import { InjectQueue } from "@nestjs/bullmq";
 import { SSHProcessor } from "./ssh/ssh.processor";
 import { Queue } from "bullmq";
-import { Indices, parseRemoteIndexFilesWithSFTP } from "@pbs-manager/data-sync";
+import { Indices, parseIndexFilePaths, parseRemoteIndexFilesWithSFTP, runFullSync } from "@pbs-manager/data-sync";
+import { timeAsync, timeSync } from "./common-utils";
 
 function* chunkGenerator<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -81,6 +82,77 @@ export class AppService implements OnModuleInit {
         //     .catch(error =>
         //         this.logger.error(`Error in test 2: ${error instanceof Error ? error.message : String(error)}`)
         //     );
+        this.test3()
+            .then(() => this.logger.log("Test 3 completed"))
+            .catch(error =>
+                this.logger.error(`Error in test 3: ${error instanceof Error ? error.message : String(error)}`)
+            );
+    }
+
+    async test3(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
+        try {
+            await this.dataSource.transaction(async entityManagerOuter => {
+                this.logger.log("Processing indices for datastoreId " + datastoreId);
+                const datastore: Datastore = await entityManagerOuter.findOneBy(Datastore, { id: datastoreId });
+                if (!datastore) {
+                    throw new Error(`Datastore with id ${datastoreId} not found`);
+                }
+                const datastoreMountpoint: string = datastore.mountpoint;
+                if (!datastoreMountpoint) {
+                    throw new Error(`Mountpoint for datastore with id ${datastoreId} not found`);
+                }
+                const findCommandArray: string[] = buildIndexFileFindCommandArray(datastoreMountpoint, true);
+                this.logger.verbose(findCommandArray);
+
+                this.logger.verbose("Finding index files on disk using SSH");
+                const options: SSHExecOptions = { stream: "both", execOptions: { pty: false } };
+                const {
+                    startTime,
+                    endTime,
+                    response,
+                }: { startTime: number; endTime: number; response: string | SSHExecCommandResponse } =
+                    await useSSHConnection(entityManagerOuter, { sshConnectionId }, async ssh =>
+                        this.executeAndTimeCommand(ssh, findCommandArray, options)
+                    );
+                // this.logger.verbose(response);
+                this.logger.verbose(`Time taken: ${endTime - startTime}ms`);
+                let stdout: string;
+                if (typeof response === "string") {
+                    stdout = response;
+                } else {
+                    stdout = response.stdout;
+                    if (response.stderr) {
+                        this.logger.verbose(`code: ${response.code}, signal: ${response.signal}`);
+                        this.logger.verbose(response.stderr);
+                    }
+                }
+
+                const paths: string[] = stdout.split("\x00").filter(path => path.trim() !== "");
+                this.logger.verbose(`Found ${paths.length} index files on disk for datastoreId ${datastoreId}`);
+
+                const { result: parsedData, time } = timeSync(() => parseIndexFilePaths(hostId, paths));
+                this.logger.debug("Parsed index file paths into structured data in " + time + "ms");
+                this.logger.debug(
+                    `Parsed ${parsedData.datastores.length} datastores, ${parsedData.namespaces.length} namespaces, ${parsedData.groups.length} groups, ${parsedData.snapshots.length} snapshots, ${parsedData.fileArchives.length} file archives, and ${parsedData.imageArchives.length} image archives from index file paths for datastoreId ${datastoreId}`
+                );
+                // parsedData.archives = parsedData.archives.slice(0, 2);
+                // parsedData.snapshots = parsedData.snapshots.slice(0, 1);
+                // parsedData.groups = parsedData.groups.slice(0, 1);
+                // this.logger.verbose(parsedData);
+
+                await entityManagerOuter.transaction(async entityManager => {
+                    const { result, time } = await timeAsync(() =>
+                        runFullSync(entityManager, parsedData, hostId, new Logger(`FullSync-${datastoreId}`))
+                    );
+                    this.logger.debug(
+                        `Completed full sync of parsed index file data with database in ${time} ms for datastoreId ${datastoreId}`
+                    );
+                    // throw new Error("Rolling back transaction for testing purposes");
+                });
+            });
+        } catch (error) {
+            this.logger.error(`Error executing SSH command: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 
     async test2(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
