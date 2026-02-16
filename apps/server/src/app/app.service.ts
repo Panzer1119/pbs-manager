@@ -77,9 +77,9 @@ export class AppService implements OnModuleInit {
         this.logger.log("AppService initialized");
         // await this.test();
         // this.test2()
-        //     .then(() => this.logger.log("Test completed"))
+        //     .then(() => this.logger.log("Test 2 completed"))
         //     .catch(error =>
-        //         this.logger.error(`Error in test: ${error instanceof Error ? error.message : String(error)}`)
+        //         this.logger.error(`Error in test 2: ${error instanceof Error ? error.message : String(error)}`)
         //     );
     }
 
