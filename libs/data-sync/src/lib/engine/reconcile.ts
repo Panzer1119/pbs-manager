@@ -1,5 +1,11 @@
-import { EntityManager, InsertResult, QueryDeepPartialEntity } from "typeorm";
+import { EntityManager, InsertResult, ObjectLiteral, QueryDeepPartialEntity } from "typeorm";
 import { Key, ReconcileAdapter } from "./adapter";
+
+function* partitionArray<T>(arr: T[], size: number): Generator<T[]> {
+    for (let i = 0; i < arr.length; i += size) {
+        yield arr.slice(i, i + size);
+    }
+}
 
 export interface ReconcileOptions {
     filterExisting?: boolean;
@@ -40,14 +46,16 @@ export async function reconcile<T, R>(
         adapter.mark(entity as T, timestamp);
     }
     // Persist
-    const insertResult: InsertResult = await entityManager.insert(adapter.getTarget(), entitiesToInsert);
-    if (insertResult.identifiers.length !== entitiesToInsert.length) {
-        throw new Error(
-            `Expected to insert ${entitiesToInsert.length} entities, but got ${insertResult.identifiers.length}`
-        );
+    const identifiers: ObjectLiteral[] = [];
+    for (const archiveChunkBatch of partitionArray(entitiesToInsert, 1000)) {
+        const insertResult: InsertResult = await entityManager.insert(adapter.getTarget(), archiveChunkBatch);
+        identifiers.push(...insertResult.identifiers);
+    }
+    if (identifiers.length !== entitiesToInsert.length) {
+        throw new Error(`Expected to insert ${entitiesToInsert.length} entities, but got ${identifiers.length}`);
     }
     for (let i = 0; i < entitiesToInsert.length; i++) {
-        adapter.updateId(entitiesToInsert[i] as T, insertResult.identifiers[i]);
+        adapter.updateId(entitiesToInsert[i] as T, identifiers[i]);
     }
     if (adapter.getSelfReferenceKeyProperties) {
         for (const { objectKey, objectIdKey } of adapter.getSelfReferenceKeyProperties()) {
@@ -64,10 +72,12 @@ export async function reconcile<T, R>(
             }
         }
     }
-    await entityManager.upsert(adapter.getTarget(), entitiesToUpdate, {
-        conflictPaths: adapter.getCompositeKeyProperties() as string[],
-        upsertType: "on-conflict-do-update",
-    });
+    for (const archiveChunkBatch of partitionArray(entitiesToUpdate, 1000)) {
+        await entityManager.upsert(adapter.getTarget(), archiveChunkBatch, {
+            conflictPaths: adapter.getCompositeKeyProperties() as string[],
+            upsertType: "on-conflict-do-update",
+        });
+    }
     // Sweep
     await adapter.sweep(entityManager, timestamp);
     let filteredEntityMap: Map<Key, T> = entityMap;
