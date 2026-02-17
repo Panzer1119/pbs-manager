@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { DataSource, EntityManager, In } from "typeorm";
+import { And, DataSource, EntityManager, In, IsNull, LessThan, Not } from "typeorm";
 import {
+    Archive,
     ArchiveChunk,
     Chunk,
     Datastore,
@@ -15,6 +16,7 @@ import {
 import { archiveToFilePath, Indices, parseRemoteIndexFilesWithSFTP } from "@pbs-manager/data-sync";
 import { DatastoreService } from "../datastore/datastore.service";
 import { useSFTPConnection } from "../ssh-utils";
+import { FindOptionsWhere } from "typeorm/find-options/FindOptionsWhere";
 
 function* partitionArray<T>(arr: T[], size: number): Generator<T[]> {
     for (let i = 0; i < arr.length; i += size) {
@@ -30,7 +32,123 @@ export class ArchiveService {
         @InjectDataSource() private readonly dataSource: DataSource,
         private readonly datastoreService: DatastoreService
     ) {
-        setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 1000);
+        setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 5000);
+        setTimeout(() => this.updateStatistics(1000, -1), 5000);
+    }
+
+    async updateStatistics(limit: number = 1000, ageThresholdMillis: number = -1): Promise<void> {
+        this.logger.log(`Starting archive statistics update`);
+        try {
+            await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
+                const now: number = Date.now();
+                const findOptionsWhereArray: FindOptionsWhere<Archive>[] = [
+                    { statistics: { uniqueSizeBytes: IsNull() }, isIndexParsed: true, isMissingChunks: false },
+                    { statistics: { logicalSizeBytes: IsNull() }, isIndexParsed: true, isMissingChunks: false },
+                    { statistics: { calculatedAt: IsNull() }, isIndexParsed: true, isMissingChunks: false },
+                ];
+                // If the age threshold is set to a negative value, we only update statistics for Archives that have missing statistics
+                if (ageThresholdMillis >= 0) {
+                    findOptionsWhereArray.push({
+                        statistics: { calculatedAt: And(Not(IsNull()), LessThan(new Date(now - ageThresholdMillis))) },
+                    });
+                }
+                // Get all Archives that need statistics update based on the provided age threshold or if they have never had their statistics updated, with pessimistic locking to prevent concurrent processing
+                const fileArchives: FileArchive[] = await transactionalEntityManager.find(FileArchive, {
+                    where: findOptionsWhereArray as FindOptionsWhere<FileArchive>[],
+                    order: {
+                        // Prioritize archives that have never had their statistics calculated, then oldest calculations first
+                        statistics: { calculatedAt: { direction: "ASC", nulls: "FIRST" } },
+                        metadata: { creation: "ASC" },
+                    },
+                    lock: { mode: "pessimistic_write", onLocked: "skip_locked" },
+                    take: limit,
+                });
+                const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
+                    where: findOptionsWhereArray as FindOptionsWhere<ImageArchive>[],
+                    order: {
+                        // Prioritize archives that have never had their statistics calculated, then oldest calculations first
+                        statistics: { calculatedAt: { direction: "ASC", nulls: "FIRST" } },
+                        metadata: { creation: "ASC" },
+                    },
+                    lock: { mode: "pessimistic_write", onLocked: "skip_locked" },
+                    take: limit,
+                });
+                this.logger.verbose(
+                    `Found ${fileArchives.length} FileArchive(s) and ${imageArchives.length} ImageArchive(s) for statistics update`
+                );
+                const fileArchivesById: Map<number, FileArchive> = new Map(
+                    fileArchives.map(archive => [archive.id, archive])
+                );
+                const imageArchivesById: Map<number, ImageArchive> = new Map(
+                    imageArchives.map(archive => [archive.id, archive])
+                );
+                const archiveIds: Set<number> = new Set([...fileArchivesById.keys(), ...imageArchivesById.keys()]);
+                this.logger.verbose(`Found ${archiveIds.size} total archive(s) for statistics update`);
+                // Get corresponding ArchiveChunks for the identified Archives
+                const archiveChunks: ArchiveChunk[] = await transactionalEntityManager.find(ArchiveChunk, {
+                    where: { archiveId: In(Array.from(archiveIds)) },
+                    lock: { mode: "pessimistic_read" },
+                });
+                this.logger.verbose(`Loaded ${archiveChunks.length} archive-chunk relation(s) for statistics update`);
+                const archiveChunksByArchiveId: Map<number, ArchiveChunk[]> = new Map();
+                for (const archiveChunk of archiveChunks) {
+                    if (!archiveChunksByArchiveId.has(archiveChunk.archiveId)) {
+                        archiveChunksByArchiveId.set(archiveChunk.archiveId, []);
+                    }
+                    archiveChunksByArchiveId.get(archiveChunk.archiveId).push(archiveChunk);
+                }
+                // Get corresponding Chunks for the identified Archives based on the loaded ArchiveChunks
+                const chunkIds: Set<number> = new Set(archiveChunks.map(ac => ac.chunkId));
+                const chunks: Chunk[] = [];
+                for (const idsBatch of partitionArray(Array.from(chunkIds), 10000)) {
+                    chunks.push(
+                        ...(await transactionalEntityManager.find(Chunk, {
+                            where: { id: In(idsBatch) },
+                            lock: { mode: "pessimistic_read" },
+                        }))
+                    );
+                }
+                this.logger.verbose(`Loaded ${chunks.length} unique chunk(s) for statistics update`);
+                const chunkSizeById: Map<number, number> = new Map(chunks.map(chunk => [chunk.id, chunk.sizeBytes]));
+                // Calculate and update statistics for each identified Archive
+                const archives: Archive[] = [...fileArchives, ...imageArchives];
+                for (const archive of archives) {
+                    const archiveChunks: ArchiveChunk[] = archiveChunksByArchiveId.get(archive.id) ?? [];
+                    let uniqueSizeBytes: number | null = 0;
+                    let logicalSizeBytes: number | null = 0;
+                    for (const archiveChunk of archiveChunks) {
+                        const chunkSizeBytes: number = chunkSizeById.get(archiveChunk.chunkId) ?? 0;
+                        uniqueSizeBytes += chunkSizeBytes;
+                        logicalSizeBytes += chunkSizeBytes * archiveChunk.count;
+                    }
+                    if (uniqueSizeBytes === 0) {
+                        uniqueSizeBytes = null;
+                    }
+                    if (logicalSizeBytes === 0) {
+                        logicalSizeBytes = null;
+                    }
+                    const deduplicationRatio: number | null =
+                        uniqueSizeBytes && logicalSizeBytes !== null ? logicalSizeBytes / uniqueSizeBytes : null;
+                    if (archive.statistics.uniqueSizeBytes !== uniqueSizeBytes) {
+                        archive.statistics.uniqueSizeBytes = uniqueSizeBytes;
+                    }
+                    if (archive.statistics.logicalSizeBytes !== logicalSizeBytes) {
+                        archive.statistics.logicalSizeBytes = logicalSizeBytes;
+                    }
+                    if (archive.statistics.deduplicationRatio !== deduplicationRatio) {
+                        archive.statistics.deduplicationRatio = deduplicationRatio;
+                    }
+                    archive.statistics.calculatedAt = new Date(now);
+                }
+                this.logger.verbose(
+                    `Calculated statistics for ${fileArchives.length} FileArchive(s) and ${imageArchives.length} ImageArchive(s)`
+                );
+                await transactionalEntityManager.save(archives, { chunk: 1000 });
+            });
+            this.logger.log(`Completed archive statistics update`);
+        } catch (error) {
+            this.logger.error(`Error during archive statistics update`, error);
+        }
     }
 
     async parseMissingArchiveIndexes(
