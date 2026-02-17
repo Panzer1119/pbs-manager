@@ -205,7 +205,7 @@ export class ArchiveService {
                 ): void {
                     let currentNamespaceId: number | undefined = namespaceId;
                     while (currentNamespaceId != null) {
-                        addChunkCount(chunkCountsByChunkIdByNamespaceId, namespaceId, chunkId, count);
+                        addChunkCount(chunkCountsByChunkIdByNamespaceId, currentNamespaceId, chunkId, count);
                         const currentNamespace: Namespace | undefined = namespaceMap.get(currentNamespaceId);
                         if (!currentNamespace) {
                             throw new Error(
