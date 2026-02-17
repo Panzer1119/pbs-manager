@@ -76,6 +76,12 @@ export class AppService implements OnModuleInit {
 
     async onModuleInit(): Promise<void> {
         this.logger.log("AppService initialized");
+        // const jobData: SSHCommandExecutionJobData = {
+        //     connection: { sshConnectionId: 1 },
+        //     command: ["curl", "https://google.com"],
+        //     options: { stream: "both-stderr-to-job-log" },
+        // };
+        // await this.sshQueue.add(SSHProcessor.JOB_NAME_SSH_COMMAND_EXECUTION, jobData);
         // Find Chunk Files
         // this.test1()
         //     .then(() => this.logger.log("Test 1 completed"))
