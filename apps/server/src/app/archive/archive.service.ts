@@ -33,7 +33,7 @@ export class ArchiveService {
         @InjectDataSource() private readonly dataSource: DataSource,
         private readonly datastoreService: DatastoreService
     ) {
-        setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 5000);
+        // setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 5000);
         // setTimeout(() => this.updateStatistics(1, false), 3000);
     }
 
