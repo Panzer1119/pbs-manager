@@ -173,18 +173,13 @@ export class ArchiveService {
                     }
                     archiveChunksByArchiveId.get(archiveChunk.archiveId).push(archiveChunk);
                 }
-                this.logger.verbose(
-                    `Loaded ${archiveChunks.length} existing archive-chunk relation(s) for datastore ID ${datastoreId}`
-                );
-                // Load the Chunk sizes for the Chunks related to the identified Archives with pessimistic locking to prevent concurrent modifications during statistics calculation
-                const chunkIds: Set<number> = new Set(archiveChunks.map(ac => ac.chunkId));
-                this.logger.verbose(
-                    `Loading chunk sizes for ${chunkIds.size} unique chunk ID(s) related to identified archives for datastore ID ${datastoreId}`
-                );
                 const chunkSizeById: Map<number, number> = new Map();
                 for (const archiveChunk of archiveChunks) {
                     chunkSizeById.set(archiveChunk.chunkId, archiveChunk.sizeBytes);
                 }
+                this.logger.verbose(
+                    `Loaded ${archiveChunks.length} existing archive-chunk relation(s) for datastore ID ${datastoreId}`
+                );
                 // Find unique chunk ids across the entities
                 const chunkCountsByChunkId: Map<number, number> = new Map();
                 const chunkCountsByChunkIdByNamespaceId: Map<number, Map<number, number>> = new Map();
