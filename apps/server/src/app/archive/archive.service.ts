@@ -143,10 +143,25 @@ export class ArchiveService {
                 this.logger.verbose(
                     `Loading existing archive-chunk relations for ${archiveIds.size} unique archive ID(s) for datastore ID ${datastoreId}`
                 );
-                const archiveChunks: ArchiveChunk[] = await transactionalEntityManager.find(ArchiveChunk, {
-                    where: { archiveId: In(Array.from(archiveIds)) },
-                    lock: { mode: "pessimistic_read" },
-                });
+                const archiveChunks: {
+                    archiveId: number;
+                    chunkId: number;
+                    count: number;
+                    sizeBytes: number;
+                }[] = (
+                    await transactionalEntityManager
+                        .createQueryBuilder(ArchiveChunk, "ac")
+                        .leftJoin(Chunk, "c", "c.id = ac.chunk_id")
+                        .select(["ac.archive_id", "ac.chunk_id", "ac.count", "c.size_bytes"])
+                        .where("ac.archive_id IN (:...archiveIds)", { archiveIds: Array.from(archiveIds) })
+                        // .setLock("pessimistic_read") // QueryFailedError: FOR SHARE cannot be applied to the nullable side of an outer join
+                        .getRawMany()
+                ).map(row => ({
+                    archiveId: row["archive_id"],
+                    chunkId: row["chunk_id"],
+                    count: row["ac_count"],
+                    sizeBytes: Number(row["size_bytes"] || 0),
+                }));
                 const archiveChunksByArchiveId: Map<number, ArchiveChunk[]> = new Map();
                 for (const archiveChunk of archiveChunks) {
                     if (!archiveChunksByArchiveId.has(archiveChunk.archiveId)) {
@@ -162,22 +177,10 @@ export class ArchiveService {
                 this.logger.verbose(
                     `Loading chunk sizes for ${chunkIds.size} unique chunk ID(s) related to identified archives for datastore ID ${datastoreId}`
                 );
-                //TODO Maybe load the chunk sizes together with the ArchiveChunks to speed up the whole process?
                 const chunkSizeById: Map<number, number> = new Map();
-                for (const idsBatch of partitionArray(Array.from(chunkIds), 10000)) {
-                    const chunks: { chunk_id: string; size_bytes: string }[] = await transactionalEntityManager
-                        .createQueryBuilder(Chunk, "chunk")
-                        .select(["chunk.id", "chunk.size_bytes"])
-                        .where({ id: In(idsBatch) })
-                        .setLock("pessimistic_read")
-                        .getRawMany();
-                    for (const chunk of chunks) {
-                        chunkSizeById.set(parseInt(chunk.chunk_id, 10), parseInt(chunk.size_bytes, 10));
-                    }
+                for (const archiveChunk of archiveChunks) {
+                    chunkSizeById.set(archiveChunk.chunkId, archiveChunk.sizeBytes);
                 }
-                this.logger.verbose(
-                    `Loaded chunk sizes for ${chunkSizeById.size} unique chunk ID(s) related to identified archives for datastore ID ${datastoreId}`
-                );
                 // Find unique chunk ids across the entities
                 const chunkCountsByChunkId: Map<number, number> = new Map();
                 const chunkCountsByChunkIdByNamespaceId: Map<number, Map<number, number>> = new Map();
