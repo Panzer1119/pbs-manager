@@ -37,7 +37,11 @@ export class ArchiveService {
         // setTimeout(() => this.updateStatistics(1, false), 3000);
     }
 
-    async updateStatistics(datastoreId: number, includeMissingChunks: boolean = false): Promise<void> {
+    async updateStatistics(
+        datastoreId: number,
+        markChunks: boolean = false,
+        includeMissingChunks: boolean = false
+    ): Promise<void> {
         this.logger.log(`Starting statistics update for datastore ID ${datastoreId}`);
         try {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
@@ -283,11 +287,48 @@ export class ArchiveService {
                 this.logger.verbose(`Calculating statistics for ${archiveMap.size} Archives(s)`);
                 calculateStatisticsDeep(Archive, archiveMap, chunkCountsByChunkIdByArchiveId);
                 // Save the updated statistics for the Archives, Snapshots, Groups, Namespaces, and Datastore in a single transaction to ensure consistency
-                this.logger.verbose(`Saving statistics`);
+                this.logger.verbose(
+                    `Saving updated statistics for Datastore, Namespaces, Groups, Snapshots, and Archives for datastore ID ${datastoreId}`
+                );
                 await transactionalEntityManager.save(
                     [datastore, ...namespaces, ...groups, ...snapshots, ...archives],
                     { chunk: 1000 }
                 );
+                this.logger.verbose(
+                    `Saved statistics for Datastore, ${namespaces.length} Namespaces, ${groups.length} Groups, ${snapshots.length} Snapshots, and ${archives.length} Archives`
+                );
+                if (markChunks) {
+                    // Update Chunks
+                    // // Mark all chunks in the datastore as unused first
+                    this.logger.verbose(
+                        `Marking all chunks in datastore ID ${datastoreId} as unused before updating based on identified Archives`
+                    );
+                    await transactionalEntityManager
+                        .createQueryBuilder(Chunk, "c")
+                        .update()
+                        .set({ unused: true })
+                        .where("datastore_id = :datastoreId", { datastoreId })
+                        .execute();
+                    this.logger.verbose(
+                        `Marked all chunks in datastore ID ${datastoreId} as unused, now marking chunks related to identified Archives as not unused`
+                    );
+                    // // Then mark the chunks that are still in use based on the identified Archives as not unused
+                    this.logger.verbose(
+                        `Marking ${chunkCountsByChunkId.size} unique chunk ID(s) as not unused based on identified Archives for datastore ID ${datastoreId}`
+                    );
+                    const usedChunkIds: number[] = Array.from(chunkCountsByChunkId.keys());
+                    for (const chunkIdBatch of partitionArray(usedChunkIds, 10000)) {
+                        await transactionalEntityManager
+                            .createQueryBuilder(Chunk, "c")
+                            .update()
+                            .set({ unused: false })
+                            .whereInIds(chunkIdBatch)
+                            .execute();
+                    }
+                    this.logger.verbose(
+                        `Marked ${chunkCountsByChunkId.size} unique chunk ID(s) as not unused based on identified Archives for datastore ID ${datastoreId}`
+                    );
+                }
             });
         } catch (error) {
             this.logger.error(`Error during statistics update for datastore ID ${datastoreId}`, error);
