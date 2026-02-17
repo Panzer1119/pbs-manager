@@ -87,11 +87,12 @@ export class AppService implements OnModuleInit {
         //     .catch(error =>
         //         this.logger.error(`Error in test 2: ${error instanceof Error ? error.message : String(error)}`)
         //     );
-        this.test3()
-            .then(() => this.logger.log("Test 3 completed"))
-            .catch(error =>
-                this.logger.error(`Error in test 3: ${error instanceof Error ? error.message : String(error)}`)
-            );
+        // Find Index Files
+        // this.test3()
+        //     .then(() => this.logger.log("Test 3 completed"))
+        //     .catch(error =>
+        //         this.logger.error(`Error in test 3: ${error instanceof Error ? error.message : String(error)}`)
+        //     );
     }
 
     async test3(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
