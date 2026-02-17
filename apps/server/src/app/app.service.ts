@@ -76,7 +76,12 @@ export class AppService implements OnModuleInit {
 
     async onModuleInit(): Promise<void> {
         this.logger.log("AppService initialized");
-        // await this.test();
+        // Find Chunk Files
+        // this.test1()
+        //     .then(() => this.logger.log("Test 1 completed"))
+        //     .catch(error =>
+        //         this.logger.error(`Error in test 1: ${error instanceof Error ? error.message : String(error)}`)
+        //     );
         // this.test2()
         //     .then(() => this.logger.log("Test 2 completed"))
         //     .catch(error =>
@@ -720,7 +725,7 @@ export class AppService implements OnModuleInit {
         return namespacesToReturn;
     }
 
-    async test(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
+    async test1(datastoreId: number = 1, sshConnectionId: number = 1, hostId: number = 1): Promise<void> {
         try {
             await this.dataSource.transaction(async entityManagerOuter => {
                 this.logger.log("Processing chunks for datastoreId " + datastoreId);
