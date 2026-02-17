@@ -207,7 +207,12 @@ export class ArchiveService {
                     while (currentNamespaceId != null) {
                         addChunkCount(chunkCountsByChunkIdByNamespaceId, namespaceId, chunkId, count);
                         const currentNamespace: Namespace | undefined = namespaceMap.get(currentNamespaceId);
-                        currentNamespaceId = currentNamespace ? currentNamespace.parentId : undefined;
+                        if (!currentNamespace) {
+                            throw new Error(
+                                `Namespace with ID ${currentNamespaceId} not found in namespace map during statistics update`
+                            );
+                        }
+                        currentNamespaceId = currentNamespace.parentId;
                     }
                 }
                 for (const archiveChunk of archiveChunks) {
