@@ -245,6 +245,10 @@ export class ArchiveService {
                         const chunkSizeBytes: number = chunkSizeById.get(chunkId) ?? 0;
                         entity.statistics.uniqueSizeBytes += chunkSizeBytes;
                         entity.statistics.logicalSizeBytes += chunkSizeBytes * count;
+                        entity.statistics.deduplicationRatio =
+                            entity.statistics.uniqueSizeBytes && entity.statistics.logicalSizeBytes !== null
+                                ? entity.statistics.logicalSizeBytes / entity.statistics.uniqueSizeBytes
+                                : null;
                     }
                 }
                 function calculateStatisticsDeep<Entity extends { statistics: StatisticsEmbedding }>(
