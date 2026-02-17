@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectDataSource } from "@nestjs/typeorm";
-import { And, DataSource, EntityManager, In, IsNull, LessThan, Not } from "typeorm";
+import { And, DataSource, EntityManager, EntityTarget, In, IsNull, LessThan, Not } from "typeorm";
 import {
     Archive,
     ArchiveChunk,
@@ -12,6 +12,7 @@ import {
     Namespace,
     Snapshot,
     SSHConnection,
+    StatisticsEmbedding,
 } from "@pbs-manager/database-schema";
 import { archiveToFilePath, Indices, parseRemoteIndexFilesWithSFTP } from "@pbs-manager/data-sync";
 import { DatastoreService } from "../datastore/datastore.service";
@@ -33,63 +34,119 @@ export class ArchiveService {
         private readonly datastoreService: DatastoreService
     ) {
         setTimeout(() => this.parseMissingArchiveIndexes(1, 1000), 5000);
-        setTimeout(() => this.updateStatistics(1000, -1), 5000);
+        // setTimeout(() => this.updateStatistics(1, false), 3000);
     }
 
-    async updateStatistics(limit: number = 1000, ageThresholdMillis: number = -1): Promise<void> {
-        this.logger.log(`Starting archive statistics update`);
+    async updateStatistics(datastoreId: number, includeMissingChunks: boolean = false): Promise<void> {
+        this.logger.log(`Starting statistics update for datastore ID ${datastoreId}`);
         try {
             await this.dataSource.transaction(async (transactionalEntityManager: EntityManager): Promise<void> => {
                 const now: number = Date.now();
-                const findOptionsWhereArray: FindOptionsWhere<Archive>[] = [
-                    { statistics: { uniqueSizeBytes: IsNull() }, isIndexParsed: true, isMissingChunks: false },
-                    { statistics: { logicalSizeBytes: IsNull() }, isIndexParsed: true, isMissingChunks: false },
-                    { statistics: { calculatedAt: IsNull() }, isIndexParsed: true, isMissingChunks: false },
-                ];
-                // If the age threshold is set to a negative value, we only update statistics for Archives that have missing statistics
-                if (ageThresholdMillis >= 0) {
-                    findOptionsWhereArray.push({
-                        statistics: { calculatedAt: And(Not(IsNull()), LessThan(new Date(now - ageThresholdMillis))) },
-                    });
+                const baseStatistics: StatisticsEmbedding = {
+                    uniqueSizeBytes: 0,
+                    logicalSizeBytes: 0,
+                    deduplicationRatio: null,
+                    calculatedAt: new Date(now),
+                };
+                // Load the Datastore with pessimistic locking
+                this.logger.verbose(
+                    `Loading datastore ID ${datastoreId} for statistics update with pessimistic locking`
+                );
+                const datastore: Datastore = await transactionalEntityManager.findOne(Datastore, {
+                    where: { id: datastoreId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                if (!datastore) {
+                    throw new Error(`Datastore with ID ${datastoreId} not found for statistics update`);
                 }
-                // Get all Archives that need statistics update based on the provided age threshold or if they have never had their statistics updated, with pessimistic locking to prevent concurrent processing
+                this.logger.verbose(`Loaded datastore ID ${datastoreId} for statistics update`);
+                // Default the statistics to 0 for the datastore to ensure we have a baseline for the update
+                datastore.statistics = { ...baseStatistics };
+                // Load the namespaces related to the datastore with pessimistic locking
+                this.logger.verbose(
+                    `Loading namespaces for datastore ID ${datastoreId} with pessimistic locking for statistics update`
+                );
+                const namespaces: Namespace[] = await transactionalEntityManager.find(Namespace, {
+                    where: { datastoreId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                const namespaceMap: Map<number, Namespace> = new Map(
+                    namespaces.map(namespace => [namespace.id, namespace])
+                );
+                this.logger.verbose(`Loaded ${namespaces.length} namespace(s) for statistics update`);
+                // Default the statistics for all related namespaces to 0 to ensure we have a baseline for the update
+                for (const namespace of namespaces) {
+                    namespace.statistics = { ...baseStatistics };
+                }
+                // Load the groups related to the datastore with pessimistic locking
+                this.logger.verbose(
+                    `Loading groups for datastore ID ${datastoreId} with pessimistic locking for statistics update`
+                );
+                const groups: Group[] = await transactionalEntityManager.find(Group, {
+                    where: { datastoreId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                const groupMap: Map<number, Group> = new Map(groups.map(group => [group.id, group]));
+                const groupIds: Set<number> = new Set(groups.map(group => group.id));
+                this.logger.verbose(`Loaded ${groups.length} group(s) for statistics update`);
+                // Default the statistics for all related groups to 0 to ensure we have a baseline for the update
+                for (const group of groups) {
+                    group.statistics = { ...baseStatistics };
+                }
+                // Load the snapshots related to the datastore with pessimistic locking
+                this.logger.verbose(
+                    `Loading snapshots for datastore ID ${datastoreId} with pessimistic locking for statistics update`
+                );
+                const snapshots: Snapshot[] = await transactionalEntityManager.find(Snapshot, {
+                    where: { groupId: In(Array.from(groupIds)), datastoreId },
+                    lock: { mode: "pessimistic_write" },
+                });
+                const snapshotMap: Map<number, Snapshot> = new Map(snapshots.map(snapshot => [snapshot.id, snapshot]));
+                const snapshotIds: Set<number> = new Set(snapshots.map(snapshot => snapshot.id));
+                this.logger.verbose(`Loaded ${snapshots.length} snapshot(s) for statistics update`);
+                // Default the statistics for all related snapshots to 0 to ensure we have a baseline for the update
+                for (const snapshot of snapshots) {
+                    snapshot.statistics = { ...baseStatistics };
+                }
+                // Load the archives related to the datastore with pessimistic locking, filtering by parsed indices and missing chunks based on the provided parameter to ensure we only process relevant archives
+                const findOptionsWhere: FindOptionsWhere<Archive> = {
+                    datastoreId,
+                    snapshotId: In(Array.from(snapshotIds)),
+                    isIndexParsed: true,
+                    isMissingChunks: includeMissingChunks ? undefined : false,
+                };
+                // Load the FileArchives and ImageArchives separately to properly type them, but we will process them together since they share the same ArchiveChunk relations and we want to calculate statistics across all archives for the datastore
+                this.logger.verbose(
+                    `Loading FileArchives and ImageArchives with parsed indices and missing chunk status ${includeMissingChunks} for datastore ID ${datastoreId} with pessimistic locking for statistics update`
+                );
                 const fileArchives: FileArchive[] = await transactionalEntityManager.find(FileArchive, {
-                    where: findOptionsWhereArray as FindOptionsWhere<FileArchive>[],
-                    order: {
-                        // Prioritize archives that have never had their statistics calculated, then oldest calculations first
-                        statistics: { calculatedAt: { direction: "ASC", nulls: "FIRST" } },
-                        metadata: { creation: "ASC" },
-                    },
-                    lock: { mode: "pessimistic_write", onLocked: "skip_locked" },
-                    take: limit,
+                    where: findOptionsWhere as FindOptionsWhere<FileArchive>[],
+                    lock: { mode: "pessimistic_write" },
                 });
                 const imageArchives: ImageArchive[] = await transactionalEntityManager.find(ImageArchive, {
-                    where: findOptionsWhereArray as FindOptionsWhere<ImageArchive>[],
-                    order: {
-                        // Prioritize archives that have never had their statistics calculated, then oldest calculations first
-                        statistics: { calculatedAt: { direction: "ASC", nulls: "FIRST" } },
-                        metadata: { creation: "ASC" },
-                    },
-                    lock: { mode: "pessimistic_write", onLocked: "skip_locked" },
-                    take: limit,
+                    where: findOptionsWhere as FindOptionsWhere<ImageArchive>[],
+                    lock: { mode: "pessimistic_write" },
                 });
+                const archives: Archive[] = [...fileArchives, ...imageArchives];
+                const archiveMap: Map<number, Archive> = new Map(
+                    [...fileArchives, ...imageArchives].map(archive => [archive.id, archive])
+                );
+                const archiveIds: Set<number> = new Set(archiveMap.keys());
                 this.logger.verbose(
-                    `Found ${fileArchives.length} FileArchive(s) and ${imageArchives.length} ImageArchive(s) for statistics update`
+                    `Loaded ${fileArchives.length} FileArchive(s) and ${imageArchives.length} ImageArchive(s) with parsed indices and missing chunk status ${includeMissingChunks} for datastore ID ${datastoreId}`
                 );
-                const fileArchivesById: Map<number, FileArchive> = new Map(
-                    fileArchives.map(archive => [archive.id, archive])
+                // Default the statistics for all related archives to 0 to ensure we have a baseline for the update
+                for (const archive of archives) {
+                    archive.statistics = { ...baseStatistics };
+                }
+                // Load the ArchiveChunk relations for the identified Archives with pessimistic locking to prevent concurrent modifications during statistics calculation
+                this.logger.verbose(
+                    `Loading existing archive-chunk relations for ${archiveIds.size} unique archive ID(s) for datastore ID ${datastoreId}`
                 );
-                const imageArchivesById: Map<number, ImageArchive> = new Map(
-                    imageArchives.map(archive => [archive.id, archive])
-                );
-                const archiveIds: Set<number> = new Set([...fileArchivesById.keys(), ...imageArchivesById.keys()]);
-                this.logger.verbose(`Found ${archiveIds.size} total archive(s) for statistics update`);
-                // Get corresponding ArchiveChunks for the identified Archives
                 const archiveChunks: ArchiveChunk[] = await transactionalEntityManager.find(ArchiveChunk, {
                     where: { archiveId: In(Array.from(archiveIds)) },
                     lock: { mode: "pessimistic_read" },
                 });
-                this.logger.verbose(`Loaded ${archiveChunks.length} archive-chunk relation(s) for statistics update`);
                 const archiveChunksByArchiveId: Map<number, ArchiveChunk[]> = new Map();
                 for (const archiveChunk of archiveChunks) {
                     if (!archiveChunksByArchiveId.has(archiveChunk.archiveId)) {
@@ -97,57 +154,139 @@ export class ArchiveService {
                     }
                     archiveChunksByArchiveId.get(archiveChunk.archiveId).push(archiveChunk);
                 }
-                // Get corresponding Chunks for the identified Archives based on the loaded ArchiveChunks
+                this.logger.verbose(
+                    `Loaded ${archiveChunks.length} existing archive-chunk relation(s) for datastore ID ${datastoreId}`
+                );
+                // Load the Chunk sizes for the Chunks related to the identified Archives with pessimistic locking to prevent concurrent modifications during statistics calculation
                 const chunkIds: Set<number> = new Set(archiveChunks.map(ac => ac.chunkId));
-                const chunks: Chunk[] = [];
+                this.logger.verbose(
+                    `Loading chunk sizes for ${chunkIds.size} unique chunk ID(s) related to identified archives for datastore ID ${datastoreId}`
+                );
+                //TODO Maybe load the chunk sizes together with the ArchiveChunks to speed up the whole process?
+                const chunkSizeById: Map<number, number> = new Map();
                 for (const idsBatch of partitionArray(Array.from(chunkIds), 10000)) {
-                    chunks.push(
-                        ...(await transactionalEntityManager.find(Chunk, {
-                            where: { id: In(idsBatch) },
-                            lock: { mode: "pessimistic_read" },
-                        }))
-                    );
-                }
-                this.logger.verbose(`Loaded ${chunks.length} unique chunk(s) for statistics update`);
-                const chunkSizeById: Map<number, number> = new Map(chunks.map(chunk => [chunk.id, chunk.sizeBytes]));
-                // Calculate and update statistics for each identified Archive
-                const archives: Archive[] = [...fileArchives, ...imageArchives];
-                for (const archive of archives) {
-                    const archiveChunks: ArchiveChunk[] = archiveChunksByArchiveId.get(archive.id) ?? [];
-                    let uniqueSizeBytes: number | null = 0;
-                    let logicalSizeBytes: number | null = 0;
-                    for (const archiveChunk of archiveChunks) {
-                        const chunkSizeBytes: number = chunkSizeById.get(archiveChunk.chunkId) ?? 0;
-                        uniqueSizeBytes += chunkSizeBytes;
-                        logicalSizeBytes += chunkSizeBytes * archiveChunk.count;
+                    const chunks: { chunk_id: string; size_bytes: string }[] = await transactionalEntityManager
+                        .createQueryBuilder(Chunk, "chunk")
+                        .select(["chunk.id", "chunk.size_bytes"])
+                        .where({ id: In(idsBatch) })
+                        .setLock("pessimistic_read")
+                        .getRawMany();
+                    for (const chunk of chunks) {
+                        chunkSizeById.set(parseInt(chunk.chunk_id, 10), parseInt(chunk.size_bytes, 10));
                     }
-                    if (uniqueSizeBytes === 0) {
-                        uniqueSizeBytes = null;
-                    }
-                    if (logicalSizeBytes === 0) {
-                        logicalSizeBytes = null;
-                    }
-                    const deduplicationRatio: number | null =
-                        uniqueSizeBytes && logicalSizeBytes !== null ? logicalSizeBytes / uniqueSizeBytes : null;
-                    if (archive.statistics.uniqueSizeBytes !== uniqueSizeBytes) {
-                        archive.statistics.uniqueSizeBytes = uniqueSizeBytes;
-                    }
-                    if (archive.statistics.logicalSizeBytes !== logicalSizeBytes) {
-                        archive.statistics.logicalSizeBytes = logicalSizeBytes;
-                    }
-                    if (archive.statistics.deduplicationRatio !== deduplicationRatio) {
-                        archive.statistics.deduplicationRatio = deduplicationRatio;
-                    }
-                    archive.statistics.calculatedAt = new Date(now);
                 }
                 this.logger.verbose(
-                    `Calculated statistics for ${fileArchives.length} FileArchive(s) and ${imageArchives.length} ImageArchive(s)`
+                    `Loaded chunk sizes for ${chunkSizeById.size} unique chunk ID(s) related to identified archives for datastore ID ${datastoreId}`
                 );
-                await transactionalEntityManager.save(archives, { chunk: 1000 });
+                // Find unique chunk ids across the entities
+                const chunkCountsByChunkId: Map<number, number> = new Map();
+                const chunkCountsByChunkIdByNamespaceId: Map<number, Map<number, number>> = new Map();
+                const chunkCountsByChunkIdByGroupId: Map<number, Map<number, number>> = new Map();
+                const chunkCountsByChunkIdBySnapshotId: Map<number, Map<number, number>> = new Map();
+                const chunkCountsByChunkIdByArchiveId: Map<number, Map<number, number>> = new Map();
+                function addChunkCount(
+                    map: Map<number, Map<number, number>>,
+                    id: number,
+                    chunkId: number,
+                    count: number = 1
+                ): void {
+                    if (!map.has(id)) {
+                        map.set(id, new Map());
+                    }
+                    const chunkCountById: Map<number, number> = map.get(id);
+                    chunkCountById.set(chunkId, (chunkCountById.get(chunkId) ?? 0) + count);
+                }
+                function addChunkCountToNamespace(
+                    namespaceId: number | undefined,
+                    chunkId: number,
+                    count: number = 1
+                ): void {
+                    let currentNamespaceId: number | undefined = namespaceId;
+                    while (currentNamespaceId != null) {
+                        addChunkCount(chunkCountsByChunkIdByNamespaceId, namespaceId, chunkId, count);
+                        const currentNamespace: Namespace | undefined = namespaceMap.get(currentNamespaceId);
+                        currentNamespaceId = currentNamespace ? currentNamespace.parentId : undefined;
+                    }
+                }
+                for (const archiveChunk of archiveChunks) {
+                    const { archiveId, chunkId, count } = archiveChunk;
+                    chunkCountsByChunkId.set(chunkId, (chunkCountsByChunkId.get(chunkId) ?? 0) + count);
+                    const archive: Archive | undefined = archiveMap.get(archiveId);
+                    if (!archive) {
+                        throw new Error(
+                            `Archive with ID ${archiveId} not found in archive map during statistics update`
+                        );
+                    }
+                    addChunkCount(chunkCountsByChunkIdByArchiveId, archiveId, chunkId, count);
+                    const snapshotId: number = archive.snapshotId;
+                    const snapshot: Snapshot | undefined = snapshotMap.get(snapshotId);
+                    if (!snapshot) {
+                        throw new Error(
+                            `Snapshot with ID ${snapshotId} not found in snapshot map during statistics update for archive ID ${archiveId}`
+                        );
+                    }
+                    addChunkCount(chunkCountsByChunkIdBySnapshotId, snapshotId, chunkId, count);
+                    const groupId: number = snapshot.groupId;
+                    const group: Group | undefined = groupMap.get(groupId);
+                    if (!group) {
+                        throw new Error(
+                            `Group with ID ${groupId} not found in group map during statistics update for archive ID ${archiveId}`
+                        );
+                    }
+                    addChunkCount(chunkCountsByChunkIdByGroupId, groupId, chunkId, count);
+                    addChunkCountToNamespace(group.namespaceId, chunkId, count);
+                }
+                // Calculate statistics across the Archives, Snapshots, Groups, Namespaces, and Datastore based on the loaded data and the relationships between them
+                function calculateStatistics(
+                    entity: { statistics: StatisticsEmbedding },
+                    chunkCountsByChunkId: Map<number, number>
+                ): void {
+                    for (const [chunkId, count] of chunkCountsByChunkId) {
+                        const chunkSizeBytes: number = chunkSizeById.get(chunkId) ?? 0;
+                        entity.statistics.uniqueSizeBytes += chunkSizeBytes;
+                        entity.statistics.logicalSizeBytes += chunkSizeBytes * count;
+                    }
+                }
+                function calculateStatisticsDeep<Entity extends { statistics: StatisticsEmbedding }>(
+                    entityClass: EntityTarget<Entity>,
+                    entityMap: Map<number, Entity>,
+                    chunkCountsByChunkIdByEntityId: Map<number, Map<number, number>>
+                ): void {
+                    for (const [entityId, chunkCounts] of chunkCountsByChunkIdByEntityId) {
+                        const entity: Entity | undefined = entityMap.get(entityId);
+                        if (!entity) {
+                            throw new Error(`Could not find ${String(entityClass)} with ID ${entityId} in map`);
+                        }
+                        calculateStatistics(entity, chunkCounts);
+                    }
+                }
+                // // Datastore
+                this.logger.verbose(`Calculating statistics for Datastore with ID ${datastoreId}`);
+                calculateStatistics(datastore, chunkCountsByChunkId);
+                // // Namespaces
+                this.logger.verbose(`Calculating statistics for ${namespaceMap.size} Namespace(s)`);
+                calculateStatisticsDeep(Namespace, namespaceMap, chunkCountsByChunkIdByNamespaceId);
+                // // Groups
+                this.logger.verbose(`Calculating statistics for ${groupMap.size} Groups(s)`);
+                calculateStatisticsDeep(Group, groupMap, chunkCountsByChunkIdByGroupId);
+                // // Snapshots
+                this.logger.verbose(`Calculating statistics for ${snapshotMap.size} Snapshot(s)`);
+                calculateStatisticsDeep(Snapshot, snapshotMap, chunkCountsByChunkIdBySnapshotId);
+                // // Archives
+                this.logger.verbose(`Calculating statistics for ${archiveMap.size} Archives(s)`);
+                calculateStatisticsDeep(Archive, archiveMap, chunkCountsByChunkIdByArchiveId);
+                // Save the updated statistics for the Archives, Snapshots, Groups, Namespaces, and Datastore in a single transaction to ensure consistency
+                this.logger.verbose(`Saving statistics`);
+                await transactionalEntityManager.save(
+                    [datastore, ...namespaces, ...groups, ...snapshots, ...archives],
+                    { chunk: 1000 }
+                );
             });
-            this.logger.log(`Completed archive statistics update`);
         } catch (error) {
-            this.logger.error(`Error during archive statistics update`, error);
+            this.logger.error(`Error during statistics update for datastore ID ${datastoreId}`, error);
+            throw error;
+        } finally {
+            this.logger.log(`Completed statistics update for datastore ID ${datastoreId}`);
         }
     }
 
@@ -552,10 +691,11 @@ export class ArchiveService {
                 }
                 await transactionalEntityManager.remove(ArchiveChunk, archiveChunksToDelete, { chunk: 1000 });
             });
-            this.logger.log(`Completed archive index parsing for datastore ID ${datastoreId}`);
         } catch (error) {
             this.logger.error(`Error during archive index parsing for datastore ID ${datastoreId}`, error);
             throw error;
+        } finally {
+            this.logger.log(`Completed archive index parsing for datastore ID ${datastoreId}`);
         }
     }
 }
